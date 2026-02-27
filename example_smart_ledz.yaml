@@ -1,0 +1,58 @@
+esphome:
+  name: smartledz-hub
+  friendly_name: SmartLEDZ Hub
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+ota:
+  - platform: esphome
+    password: "DUMMY_OTA_PASSWORD"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "SmartLEDZ Hub Fallback Hotspot"
+    password: "DUMMY_AP_PASSWORD"
+
+captive_portal:
+
+# Keep the config above this line as the standard ESPHome initial setup.
+# Add the Smart LEDZ integration config below.
+external_components:
+  - source:
+      type: git
+      url: https://github.com/hrko/esphome-smart-ledz.git
+      ref: main
+
+ble_client:
+  - id: ledz_node
+    mac_address: "AA:BB:CC:DD:EE:FF"
+    auto_connect: true
+
+smart_ledz:
+  - id: ledz_hub
+    ble_client_id: ledz_node
+    mesh_name: !secret smart_ledz_mesh_name
+    mesh_password: !secret smart_ledz_mesh_password
+
+light:
+  - platform: smart_ledz
+    id: ledz_light_1
+    name: "Smart LEDZ 0001"
+    smart_ledz_id: ledz_hub
+    target: 0x0001
+    default_transition_length: 0s
