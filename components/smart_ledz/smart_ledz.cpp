@@ -92,22 +92,6 @@ void SmartLedzHub::dump_config() {
   ESP_LOGCONFIG(TAG, "  Poll Interval: %ums", this->poll_interval_ms_);
 }
 
-SmartLedzDeviceType SmartLedzHub::map_device_type_(uint8_t type_raw) {
-  switch (type_raw) {
-    case 2:
-    case 54:
-      return SMART_LEDZ_DEVICE_TYPE_TUNABLE;
-    case 48:
-    case 52:
-    case 55:
-      return SMART_LEDZ_DEVICE_TYPE_SYNCA;
-    case 0:
-      return SMART_LEDZ_DEVICE_TYPE_AUTO;
-    default:
-      return SMART_LEDZ_DEVICE_TYPE_DIMMABLE;
-  }
-}
-
 SmartLedzHub::DeviceState &SmartLedzHub::state_ref_(uint16_t address) {
   auto it = this->device_states_.find(address);
   if (it != this->device_states_.end()) {
@@ -177,14 +161,6 @@ bool SmartLedzHub::get_device_state(uint16_t target, DeviceState *out) const {
   }
   *out = it->second;
   return it->second.seen;
-}
-
-SmartLedzDeviceType SmartLedzHub::get_device_type(uint16_t target) const {
-  auto it = this->device_states_.find(target);
-  if (it == this->device_states_.end()) {
-    return SMART_LEDZ_DEVICE_TYPE_AUTO;
-  }
-  return map_device_type_(it->second.type_raw);
 }
 
 void SmartLedzHub::notify_state_update_(uint16_t address) {
@@ -358,33 +334,13 @@ void SmartLedzHub::update_device_from_status_(uint16_t src, const uint8_t *paylo
   state.seen = true;
   state.last_update_ms = millis();
 
-  const auto device_type = map_device_type_(state.type_raw);
   const uint8_t b0 = payload10[0];
   const uint8_t b1 = payload10[1];
   const uint8_t b2 = payload10[2];
   const uint8_t b3 = payload10[3];
 
-  if (device_type == SMART_LEDZ_DEVICE_TYPE_TUNABLE) {
-    if (18 <= b3 && b3 <= 65) {
-      state.has_ct = true;
-      state.ct_raw = b3;
-    }
-    this->notify_state_update_(src);
-    return;
-  }
-
-  if (device_type == SMART_LEDZ_DEVICE_TYPE_SYNCA) {
-    state.has_rgb = true;
-    state.rgb = {b0, b1, b2};
-    this->notify_state_update_(src);
-    return;
-  }
-
-  // AUTO/unknown fallback.
-  if ((b0 != 0) || (b1 != 0) || (b2 != 0)) {
-    state.has_rgb = true;
-    state.rgb = {b0, b1, b2};
-  }
+  state.has_rgb = true;
+  state.rgb = {b0, b1, b2};
   if (18 <= b3 && b3 <= 65) {
     state.has_ct = true;
     state.ct_raw = b3;

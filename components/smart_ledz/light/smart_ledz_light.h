@@ -35,16 +35,14 @@ class SmartLedzLightOutput : public light::LightOutput,
   void on_smart_ledz_state_update(uint16_t address, const SmartLedzDeviceStateSnapshot &state) override;
 
  protected:
-  SmartLedzDeviceType effective_device_type_() const;
   static uint8_t kelvin_to_ct_raw_(float kelvin);
   void sync_from_device_state_(const SmartLedzDeviceStateSnapshot &device);
 
   uint16_t target_{0x0000};
-  SmartLedzDeviceType device_type_{SMART_LEDZ_DEVICE_TYPE_AUTO};
+  SmartLedzDeviceType device_type_{SMART_LEDZ_DEVICE_TYPE_DIMMABLE};
   int8_t ct_duv_{0};
   light::LightState *state_{nullptr};
   bool listener_registered_{false};
-  bool probe_requested_{false};
   bool suppress_write_{false};
   bool has_last_state_{false};
   bool last_on_{false};

@@ -16,7 +16,6 @@ SmartLedzLightOutput = smart_ledz_ns.class_("SmartLedzLightOutput", light.LightO
 SmartLedzDeviceType = smart_ledz_ns.enum("SmartLedzDeviceType")
 
 DEVICE_TYPE_OPTIONS = {
-    "auto": SmartLedzDeviceType.SMART_LEDZ_DEVICE_TYPE_AUTO,
     "dimmable": SmartLedzDeviceType.SMART_LEDZ_DEVICE_TYPE_DIMMABLE,
     "tunable": SmartLedzDeviceType.SMART_LEDZ_DEVICE_TYPE_TUNABLE,
     "synca": SmartLedzDeviceType.SMART_LEDZ_DEVICE_TYPE_SYNCA,
@@ -34,7 +33,7 @@ CONFIG_SCHEMA = light.BRIGHTNESS_ONLY_LIGHT_SCHEMA.extend(
         cv.GenerateID(CONF_OUTPUT_ID): cv.declare_id(SmartLedzLightOutput),
         cv.GenerateID(CONF_SMART_LEDZ_ID): cv.use_id(SmartLedzHub),
         cv.Required(CONF_TARGET): cv.hex_uint16_t,
-        cv.Optional(CONF_DEVICE_TYPE, default="auto"): cv.enum(DEVICE_TYPE_OPTIONS, lower=True),
+        cv.Required(CONF_DEVICE_TYPE): cv.enum(DEVICE_TYPE_OPTIONS, lower=True),
         cv.Optional(CONF_CT_DUV, default=0): validate_ct_duv,
     }
 )

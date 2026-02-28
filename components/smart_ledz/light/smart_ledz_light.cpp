@@ -16,16 +16,6 @@ namespace {
 static const char *const TAG = "smart_ledz.light";
 }
 
-SmartLedzDeviceType SmartLedzLightOutput::effective_device_type_() const {
-  if (this->device_type_ != SMART_LEDZ_DEVICE_TYPE_AUTO) {
-    return this->device_type_;
-  }
-  if (this->parent_ == nullptr) {
-    return SMART_LEDZ_DEVICE_TYPE_AUTO;
-  }
-  return this->parent_->get_device_type(this->target_);
-}
-
 uint8_t SmartLedzLightOutput::kelvin_to_ct_raw_(float kelvin) {
   if (kelvin <= 0) {
     kelvin = 2700.0f;
@@ -38,7 +28,7 @@ uint8_t SmartLedzLightOutput::kelvin_to_ct_raw_(float kelvin) {
 light::LightTraits SmartLedzLightOutput::get_traits() {
   auto traits = light::LightTraits();
 
-  switch (this->effective_device_type_()) {
+  switch (this->device_type_) {
     case SMART_LEDZ_DEVICE_TYPE_TUNABLE:
       traits.set_supported_color_modes({light::ColorMode::COLOR_TEMPERATURE});
       traits.set_min_mireds(1000000.0f / 6500.0f);
@@ -50,7 +40,6 @@ light::LightTraits SmartLedzLightOutput::get_traits() {
       traits.set_max_mireds(1000000.0f / 1800.0f);
       break;
     case SMART_LEDZ_DEVICE_TYPE_DIMMABLE:
-    case SMART_LEDZ_DEVICE_TYPE_AUTO:
     default:
       traits.set_supported_color_modes({light::ColorMode::BRIGHTNESS});
       break;
@@ -77,12 +66,7 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
     return;
   }
 
-  auto device_type = this->effective_device_type_();
-  if (device_type == SMART_LEDZ_DEVICE_TYPE_AUTO && !this->probe_requested_) {
-    this->parent_->send_status_query(this->target_);
-    this->parent_->send_dimming_query(this->target_);
-    this->probe_requested_ = true;
-  }
+  const auto device_type = this->device_type_;
 
   float brightness = 0.0f;
   state->current_values_as_brightness(&brightness);
@@ -197,10 +181,7 @@ void SmartLedzLightOutput::on_smart_ledz_state_update(uint16_t address, const Sm
 }
 
 void SmartLedzLightOutput::sync_from_device_state_(const SmartLedzDeviceStateSnapshot &device) {
-  auto device_type = this->effective_device_type_();
-  if (device_type == SMART_LEDZ_DEVICE_TYPE_AUTO && this->parent_ != nullptr) {
-    device_type = this->parent_->get_device_type(this->target_);
-  }
+  const auto device_type = this->device_type_;
 
   bool has_power = false;
   bool is_on = false;

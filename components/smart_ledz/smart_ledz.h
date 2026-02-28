@@ -37,7 +37,6 @@ struct SmartLedzDeviceStateSnapshot {
 };
 
 enum SmartLedzDeviceType : uint8_t {
-  SMART_LEDZ_DEVICE_TYPE_AUTO = 0,
   SMART_LEDZ_DEVICE_TYPE_DIMMABLE = 1,
   SMART_LEDZ_DEVICE_TYPE_TUNABLE = 2,
   SMART_LEDZ_DEVICE_TYPE_SYNCA = 3,
@@ -67,7 +66,6 @@ class SmartLedzHub : public ble_client::BLEClientNode, public Component {
   bool send_status_query(uint16_t target);
   bool send_dimming_query(uint16_t target);
 
-  SmartLedzDeviceType get_device_type(uint16_t target) const;
   bool get_device_state(uint16_t target, DeviceState *out) const;
   void register_state_listener(SmartLedzStateListener *listener);
   void register_polled_target(uint16_t target);
@@ -95,7 +93,6 @@ class SmartLedzHub : public ble_client::BLEClientNode, public Component {
   void update_device_from_status_(uint16_t src, const uint8_t *payload10, size_t payload_len);
   void update_device_from_f1_response_(uint16_t src, const uint8_t *payload10, size_t payload_len);
   void notify_state_update_(uint16_t address);
-  static SmartLedzDeviceType map_device_type_(uint8_t type_raw);
   DeviceState &state_ref_(uint16_t address);
 
   std::string mesh_name_;

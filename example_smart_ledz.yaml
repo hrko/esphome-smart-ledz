@@ -55,4 +55,5 @@ light:
     name: "Smart LEDZ 0001"
     smart_ledz_id: ledz_hub
     target: 0x0001
+    device_type: synca  # choose one: dimmable | tunable | synca
     default_transition_length: 0s
