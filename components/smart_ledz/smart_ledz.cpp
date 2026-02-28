@@ -318,6 +318,7 @@ void SmartLedzHub::update_device_from_online_status_(const uint8_t *payload10, s
     state.online_brightness = brightness;
     state.has_power = true;
     state.power = (status != 0) && (brightness != 0);
+    state.has_brightness = true;
     state.brightness = brightness;
     state.type_raw = type_raw;
     state.last_update_ms = millis();
@@ -341,6 +342,7 @@ void SmartLedzHub::update_device_from_status_(uint16_t src, const uint8_t *paylo
 
   state.has_rgb = true;
   state.rgb = {b0, b1, b2};
+  state.has_brightness = false;
   if (18 <= b3 && b3 <= 65) {
     state.has_ct = true;
     state.ct_raw = b3;
@@ -363,6 +365,7 @@ void SmartLedzHub::update_device_from_f1_response_(uint16_t src, const uint8_t *
 
   auto &state = this->state_ref_(src);
   state.seen = true;
+  state.has_brightness = true;
   state.brightness = payload10[6];
   state.last_update_ms = millis();
   this->notify_state_update_(src);
@@ -485,6 +488,10 @@ bool SmartLedzHub::send_on_off(uint16_t target, bool on) {
     if (!on) {
       state.has_online_brightness = true;
       state.online_brightness = 0;
+      state.has_brightness = true;
+      state.brightness = 0;
+    } else {
+      state.has_brightness = false;
     }
     state.last_update_ms = millis();
   }
@@ -497,6 +504,7 @@ bool SmartLedzHub::send_brightness(uint16_t target, uint8_t brightness) {
   if (ok) {
     auto &state = this->state_ref_(target);
     state.seen = true;
+    state.has_brightness = true;
     state.brightness = brightness;
     state.last_update_ms = millis();
   }

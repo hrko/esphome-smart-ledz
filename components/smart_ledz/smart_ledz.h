@@ -26,6 +26,8 @@ struct SmartLedzDeviceStateSnapshot {
   uint8_t online_brightness{0};
   bool has_power{false};
   bool power{false};
+  // True when the most recent update for this snapshot included brightness.
+  bool has_brightness{false};
   uint8_t brightness{0};
   // Raw type byte from 0xDC online status notification (historically called CH).
   uint8_t type_raw{0};

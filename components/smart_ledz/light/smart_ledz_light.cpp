@@ -198,13 +198,18 @@ void SmartLedzLightOutput::sync_from_device_state_(const SmartLedzDeviceStateSna
   }
   const uint8_t brightness_pct = static_cast<uint8_t>(std::max(0, std::min(100, static_cast<int>(device.brightness))));
   const float brightness = brightness_pct / 100.0f;
+  const bool brightness_known = device.has_brightness;
 
   const bool on_changed = has_power && (!this->has_last_state_ || this->last_on_ != is_on);
-  const bool brightness_changed = !this->has_last_state_ || this->last_brightness_ != brightness_pct;
+  const bool brightness_changed = brightness_known &&
+                                  (!this->has_last_state_ || this->last_brightness_ != brightness_pct);
 
   bool ct_changed = false;
   bool rgb_changed = false;
   bool apply_rgb_from_notify = false;
+  bool synca_ct_changed = false;
+  uint16_t synca_kelvin = 0;
+  uint8_t synca_ct_raw = 0;
 
   if (device_type == SMART_LEDZ_DEVICE_TYPE_TUNABLE && device.has_ct && device.ct_raw >= 18) {
     ct_changed = !this->has_last_ct_raw_ || this->last_ct_raw_ != device.ct_raw;
@@ -217,11 +222,18 @@ void SmartLedzLightOutput::sync_from_device_state_(const SmartLedzDeviceStateSna
     if (effective_mode == light::ColorMode::UNKNOWN && this->state_ != nullptr) {
       effective_mode = this->state_->remote_values.get_color_mode();
     }
-    apply_rgb_from_notify = effective_mode != light::ColorMode::COLOR_TEMPERATURE;
+    if (effective_mode == light::ColorMode::COLOR_TEMPERATURE) {
+      synca_kelvin = estimate_cct_from_rgb(device.rgb[0], device.rgb[1], device.rgb[2], this->ct_duv_);
+      synca_ct_raw = kelvin_to_ct_raw_(synca_kelvin);
+      synca_ct_changed = !this->has_last_ct_raw_ || this->last_ct_raw_ != synca_ct_raw;
+    } else {
+      apply_rgb_from_notify = true;
+    }
   }
 
   const bool should_apply_color = (ct_changed && device_type == SMART_LEDZ_DEVICE_TYPE_TUNABLE) ||
-                                  (rgb_changed && device_type == SMART_LEDZ_DEVICE_TYPE_SYNCA && apply_rgb_from_notify);
+                                  (rgb_changed && device_type == SMART_LEDZ_DEVICE_TYPE_SYNCA && apply_rgb_from_notify) ||
+                                  (synca_ct_changed && device_type == SMART_LEDZ_DEVICE_TYPE_SYNCA);
   if (!on_changed && !brightness_changed && !should_apply_color) {
     return;
   }
@@ -243,6 +255,12 @@ void SmartLedzLightOutput::sync_from_device_state_(const SmartLedzDeviceStateSna
     call.set_color_temperature(1000000.0f / kelvin);
     this->has_last_ct_raw_ = true;
     this->last_ct_raw_ = device.ct_raw;
+  } else if (device_type == SMART_LEDZ_DEVICE_TYPE_SYNCA && synca_ct_changed) {
+    call.set_color_mode_if_supported(light::ColorMode::COLOR_TEMPERATURE);
+    call.set_color_temperature(1000000.0f / static_cast<float>(synca_kelvin));
+    this->preferred_synca_mode_ = light::ColorMode::COLOR_TEMPERATURE;
+    this->has_last_ct_raw_ = true;
+    this->last_ct_raw_ = synca_ct_raw;
   } else if (device_type == SMART_LEDZ_DEVICE_TYPE_SYNCA && device.has_rgb && apply_rgb_from_notify && rgb_changed) {
     call.set_color_mode_if_supported(light::ColorMode::RGB);
     call.set_rgb(device.rgb[0] / 255.0f, device.rgb[1] / 255.0f, device.rgb[2] / 255.0f);
@@ -255,7 +273,9 @@ void SmartLedzLightOutput::sync_from_device_state_(const SmartLedzDeviceStateSna
   if (has_power) {
     this->last_on_ = is_on;
   }
-  this->last_brightness_ = brightness_pct;
+  if (brightness_known) {
+    this->last_brightness_ = brightness_pct;
+  }
 }
 
 }  // namespace smart_ledz
