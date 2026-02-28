@@ -14,6 +14,7 @@ class SmartLedzLightOutput : public light::LightOutput,
  public:
   void set_target(uint16_t target) { this->target_ = target; }
   void set_device_type(SmartLedzDeviceType device_type) { this->device_type_ = device_type; }
+  void set_ignore_transition(bool ignore_transition) { this->ignore_transition_ = ignore_transition; }
   void set_ct_duv(int8_t ct_duv) {
     switch (ct_duv) {
       case -6:
@@ -52,6 +53,7 @@ class SmartLedzLightOutput : public light::LightOutput,
   bool has_last_rgb_{false};
   std::array<uint8_t, 3> last_rgb_{0, 0, 0};
   light::ColorMode preferred_synca_mode_{light::ColorMode::UNKNOWN};
+  bool ignore_transition_{true};
   uint32_t last_tx_ms_{0};
 };
 

@@ -57,3 +57,4 @@ light:
     target: 0x0001
     device_type: synca  # choose one: dimmable | tunable | synca
     default_transition_length: 0s
+    ignore_transition: true

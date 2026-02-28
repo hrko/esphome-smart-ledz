@@ -9,6 +9,7 @@ DEPENDENCIES = ["smart_ledz"]
 
 CONF_DEVICE_TYPE = "device_type"
 CONF_CT_DUV = "ct_duv"
+CONF_IGNORE_TRANSITION = "ignore_transition"
 CONF_TARGET = "target"
 
 SmartLedzHub = smart_ledz_ns.class_("SmartLedzHub")
@@ -35,6 +36,7 @@ CONFIG_SCHEMA = light.BRIGHTNESS_ONLY_LIGHT_SCHEMA.extend(
         cv.Required(CONF_TARGET): cv.hex_uint16_t,
         cv.Required(CONF_DEVICE_TYPE): cv.enum(DEVICE_TYPE_OPTIONS, lower=True),
         cv.Optional(CONF_CT_DUV, default=0): validate_ct_duv,
+        cv.Optional(CONF_IGNORE_TRANSITION, default=True): cv.boolean,
     }
 )
 
@@ -48,3 +50,4 @@ async def to_code(config):
     cg.add(var.set_target(config[CONF_TARGET]))
     cg.add(var.set_device_type(config[CONF_DEVICE_TYPE]))
     cg.add(var.set_ct_duv(config[CONF_CT_DUV]))
+    cg.add(var.set_ignore_transition(config[CONF_IGNORE_TRANSITION]))

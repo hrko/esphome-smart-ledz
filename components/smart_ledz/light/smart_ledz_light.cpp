@@ -67,10 +67,11 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
   }
 
   const auto device_type = this->device_type_;
+  const auto &values = this->ignore_transition_ ? state->remote_values : state->current_values;
 
   float brightness = 0.0f;
-  state->current_values_as_brightness(&brightness);
-  const bool is_on = state->current_values.is_on();
+  values.as_brightness(&brightness);
+  const bool is_on = values.is_on();
 
   auto brightness_pct = static_cast<int>(roundf(brightness * 100.0f));
   brightness_pct = std::max(0, std::min(100, brightness_pct));
@@ -92,14 +93,14 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
   bool should_send_rgb = false;
 
   if (is_on && device_type == SMART_LEDZ_DEVICE_TYPE_TUNABLE) {
-    const auto kelvin = state->current_values.get_color_temperature_kelvin();
+    const auto kelvin = values.get_color_temperature_kelvin();
     desired_ct_raw = kelvin_to_ct_raw_(kelvin);
     should_send_ct = !this->has_last_ct_raw_ || this->last_ct_raw_ != desired_ct_raw;
   } else if (is_on && device_type == SMART_LEDZ_DEVICE_TYPE_SYNCA) {
-    auto mode = state->current_values.get_color_mode();
+    auto mode = values.get_color_mode();
     if (mode == light::ColorMode::COLOR_TEMPERATURE) {
       this->preferred_synca_mode_ = light::ColorMode::COLOR_TEMPERATURE;
-      auto kelvin = state->current_values.get_color_temperature_kelvin();
+      auto kelvin = values.get_color_temperature_kelvin();
       if (kelvin <= 0) {
         kelvin = 2700.0f;
       }
@@ -115,7 +116,7 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
       float red = 0.0f;
       float green = 0.0f;
       float blue = 0.0f;
-      state->current_values_as_rgb(&red, &green, &blue);
+      values.as_rgb(&red, &green, &blue);
       desired_r = static_cast<uint8_t>(std::max(0, std::min(255, static_cast<int>(roundf(red * 255.0f)))));
       desired_g = static_cast<uint8_t>(std::max(0, std::min(255, static_cast<int>(roundf(green * 255.0f)))));
       desired_b = static_cast<uint8_t>(std::max(0, std::min(255, static_cast<int>(roundf(blue * 255.0f)))));
