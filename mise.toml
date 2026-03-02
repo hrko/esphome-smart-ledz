@@ -1,0 +1,17 @@
+[tools]
+"pipx:esphome" = "2026.2.2"
+"pipx:ruff" = "0.15.4"
+"pipx:ty" = "0.0.19"
+python = "3.14.3"
+uv = "0.10.7"
+
+[tasks.esphome-compile]
+description = "Compile Smart LEDZ test YAML (local external component, no secrets)"
+run = "PLATFORMIO_CORE_DIR=.platformio-local esphome compile compile_test.yaml"
+
+[tasks.lint]
+description = "Run Python lint/type checks for the external component"
+run = """
+ruff check components tools
+ty check --project . --python "$(mise where pipx:esphome)/esphome/bin/python3" --extra-search-path components components tools
+"""

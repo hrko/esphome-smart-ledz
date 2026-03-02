@@ -1,0 +1,52 @@
+esphome:
+  name: smartledz-compile-test
+  friendly_name: SmartLEDZ Compile Test
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: "dummy-ssid"
+  password: "dummy-pass-1234"
+  ap:
+    ssid: "SmartLEDZ Compile Fallback"
+    password: "dummy-ap-password"
+
+captive_portal:
+
+external_components:
+  - source:
+      type: local
+      path: ./components
+    components: [smart_ledz]
+
+ble_client:
+  - id: ledz_node
+    mac_address: "AA:BB:CC:DD:EE:FF"
+    auto_connect: true
+
+smart_ledz:
+  - id: ledz_hub
+    ble_client_id: ledz_node
+    mesh_name: "dummy-mesh-name"
+    mesh_password: "dummy-mesh-password"
+
+light:
+  - platform: smart_ledz
+    id: ledz_light_1
+    name: "Smart LEDZ Compile Test"
+    smart_ledz_id: ledz_hub
+    target: 0x0001
+    device_type: synca
+    default_transition_length: 0s
+    ignore_transition: true
+    ct_duv: 0

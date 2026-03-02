@@ -1,2 +1,12 @@
 .esphome/
 secrets.yaml
+
+# Local PlatformIO working directory used by compile tasks.
+.platformio-local/
+
+# Python bytecode/cache artifacts.
+__pycache__/
+*.pyc
+
+# Lint/type-check caches.
+.ruff_cache/
