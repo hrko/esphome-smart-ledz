@@ -131,6 +131,19 @@
 
       <section class="card" id="output-card">
         <h2>5. Generated Output</h2>
+        <div class="ref-config">
+          <div class="ref-row">
+            <label class="field ref-field">
+              <span>external_components.ref</span>
+              <input id="component-ref" type="text" value="main" placeholder="main or full commit hash" />
+            </label>
+            <button id="fetch-latest-release-ref" type="button">Use Latest Release Commit</button>
+          </div>
+          <p class="muted ref-guidance">
+            Reproducible operation is recommended: pin <code>ref</code> to a full commit hash.
+          </p>
+          <p id="release-ref-status" class="muted release-ref-status">Default ref is main.</p>
+        </div>
         <div id="validation-messages"></div>
         <div class="output-grid">
           <article class="output-panel">

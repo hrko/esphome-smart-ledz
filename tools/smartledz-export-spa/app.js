@@ -4,10 +4,14 @@ const ID_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const MAC_PATTERN = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
 const TARGET_PATTERN = /^0x[0-9A-Fa-f]{1,4}$/;
 const VENDOR_PATTERN = /^(0x[0-9A-Fa-f]{1,4}|\d{1,5})$/;
+const COMMIT_SHA_PATTERN = /^[0-9A-Fa-f]{40}$/;
 const CT_DUV_MIN = -6;
 const CT_DUV_MAX = 6;
 const CT_DUV_STEP = "0.1";
 const DEVICE_TYPE_ALLOWED = new Set(["dimmable", "tunable", "synca"]);
+const SOURCE_REPO_OWNER = "hrko";
+const SOURCE_REPO_NAME = "esphome-smart-ledz";
+const SOURCE_REPO_URL = `https://github.com/${SOURCE_REPO_OWNER}/${SOURCE_REPO_NAME}.git`;
 
 const TYPE_CODE_TO_DEVICE_TYPE = new Map([
   [1, "dimmable"],
@@ -48,6 +52,13 @@ const state = {
     secretMeshPasswordKey: "smart_ledz_mesh_password",
     extraYaml: "",
   },
+  source: {
+    ref: "main",
+    latestRelease: null,
+    statusText: "Default ref is main.",
+    statusTone: "status-muted",
+    fetching: false,
+  },
 };
 
 const refs = {};
@@ -73,6 +84,9 @@ function bindRefs() {
   refs.hubPollInterval = document.getElementById("hub-poll-interval");
   refs.hubTxInterval = document.getElementById("hub-tx-interval");
   refs.hubPowerOnSettle = document.getElementById("hub-power-on-settle");
+  refs.componentRef = document.getElementById("component-ref");
+  refs.fetchLatestReleaseRef = document.getElementById("fetch-latest-release-ref");
+  refs.releaseRefStatus = document.getElementById("release-ref-status");
   refs.secretMeshNameKey = document.getElementById("secret-mesh-name-key");
   refs.secretMeshPasswordKey = document.getElementById("secret-mesh-password-key");
   refs.hubExtraYaml = document.getElementById("hub-extra-yaml");
@@ -149,6 +163,17 @@ function bindEvents() {
     state.hub.powerOnSettle = refs.hubPowerOnSettle.value.trim();
     updateOutputs();
   });
+
+  refs.componentRef.addEventListener("input", () => {
+    state.source.ref = refs.componentRef.value.trim();
+    if (state.source.latestRelease && state.source.latestRelease.commitSha !== state.source.ref) {
+      state.source.latestRelease = null;
+      setSourceStatus("Manual ref mode.", "status-muted");
+    }
+    updateOutputs();
+  });
+
+  refs.fetchLatestReleaseRef.addEventListener("click", onFetchLatestReleaseRef);
 
   refs.secretMeshNameKey.addEventListener("input", () => {
     state.hub.secretMeshNameKey = refs.secretMeshNameKey.value.trim();
@@ -235,6 +260,9 @@ function syncFormFromState() {
   refs.hubPollInterval.value = state.hub.pollInterval;
   refs.hubTxInterval.value = state.hub.txInterval;
   refs.hubPowerOnSettle.value = state.hub.powerOnSettle;
+  refs.componentRef.value = state.source.ref;
+  refs.fetchLatestReleaseRef.disabled = state.source.fetching;
+  renderSourceStatus();
   refs.secretMeshNameKey.value = state.hub.secretMeshNameKey;
   refs.secretMeshPasswordKey.value = state.hub.secretMeshPasswordKey;
   refs.hubExtraYaml.value = state.hub.extraYaml;
@@ -283,6 +311,89 @@ async function onFileSelected(event) {
     refs.inputStatus.textContent = `Failed to read ${file.name}: ${error.message}`;
     refreshAll();
   }
+}
+
+async function onFetchLatestReleaseRef() {
+  if (state.source.fetching) {
+    return;
+  }
+
+  state.source.fetching = true;
+  refs.fetchLatestReleaseRef.disabled = true;
+  setSourceStatus("Fetching latest release commit...", "status-muted");
+
+  try {
+    const latest = await fetchLatestReleaseCommitHash();
+    state.source.ref = latest.commitSha;
+    state.source.latestRelease = latest;
+    refs.componentRef.value = state.source.ref;
+    setSourceStatus(`Loaded ${latest.tagName} (${latest.commitSha.slice(0, 12)}...)`, "status-ok");
+  } catch (error) {
+    state.source.latestRelease = null;
+    setSourceStatus(`Failed to fetch latest release: ${error.message}`, "status-error");
+  } finally {
+    state.source.fetching = false;
+    refs.fetchLatestReleaseRef.disabled = false;
+    updateOutputs();
+  }
+}
+
+async function fetchLatestReleaseCommitHash() {
+  const latestReleaseUrl = `https://api.github.com/repos/${SOURCE_REPO_OWNER}/${SOURCE_REPO_NAME}/releases/latest`;
+  const release = await fetchJson(latestReleaseUrl);
+  const tagName = asString(release.tag_name);
+
+  if (!tagName) {
+    throw new Error("Latest release tag was not found.");
+  }
+
+  const commitUrl = `https://api.github.com/repos/${SOURCE_REPO_OWNER}/${SOURCE_REPO_NAME}/commits/${encodeURIComponent(tagName)}`;
+  const commit = await fetchJson(commitUrl);
+  const commitSha = asString(commit.sha);
+
+  if (!COMMIT_SHA_PATTERN.test(commitSha)) {
+    throw new Error("Latest release commit hash is invalid.");
+  }
+
+  return {
+    tagName,
+    commitSha,
+  };
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/vnd.github+json",
+    },
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body = await response.json();
+      detail = asString(body && body.message);
+    } catch (error) {
+      detail = "";
+    }
+    if (detail) {
+      throw new Error(`HTTP ${response.status}: ${detail}`);
+    }
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function setSourceStatus(text, tone) {
+  state.source.statusText = text;
+  state.source.statusTone = tone;
+  renderSourceStatus();
+}
+
+function renderSourceStatus() {
+  refs.releaseRefStatus.textContent = state.source.statusText;
+  refs.releaseRefStatus.className = `muted release-ref-status ${state.source.statusTone}`;
 }
 
 function parseRawExport(raw) {
@@ -648,6 +759,10 @@ function updateOutputs() {
     errors.push("smart_ledz.vendor_id must be a hex value like 0x0211 or a decimal number.");
   }
 
+  if (!state.source.ref) {
+    errors.push("external_components.source.ref is required.");
+  }
+
   if (!state.hub.pollInterval) {
     errors.push("smart_ledz.poll_interval is required.");
   }
@@ -747,8 +862,8 @@ function generateEspHomeYaml(selectedTargets) {
   lines.push("external_components:");
   lines.push("  - source:");
   lines.push("      type: git");
-  lines.push("      url: https://github.com/hrko/esphome-smart-ledz.git");
-  lines.push("      ref: main");
+  lines.push("      url: " + SOURCE_REPO_URL);
+  lines.push(buildRefYamlLine());
   lines.push("    components: [smart_ledz]");
   lines.push("");
 
@@ -787,6 +902,21 @@ function generateEspHomeYaml(selectedTargets) {
   }
 
   return lines.join("\n") + "\n";
+}
+
+function buildRefYamlLine() {
+  const base = "      ref: " + yamlQuote(state.source.ref);
+  if (!state.source.latestRelease) {
+    return base;
+  }
+  if (state.source.latestRelease.commitSha !== state.source.ref) {
+    return base;
+  }
+  const tagName = asString(state.source.latestRelease.tagName);
+  if (!tagName) {
+    return base;
+  }
+  return `${base} # ${tagName}`;
 }
 
 function generateSecretsYaml() {
