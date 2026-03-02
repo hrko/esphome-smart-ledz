@@ -33,7 +33,11 @@ DEVICE_TYPE_OPTIONS = {
 }
 
 DUV_NUMBER_SCHEMA = cv.maybe_simple_value(
-    number.number_schema(SmartLedzDuvNumber, entity_category=ENTITY_CATEGORY_CONFIG)
+    number.number_schema(
+        SmartLedzDuvNumber,
+        icon="mdi:contrast",
+        entity_category=ENTITY_CATEGORY_CONFIG,
+    )
     .extend(
         {
             cv.Optional(CONF_INITIAL_VALUE): cv.float_range(min=-6, max=6),
