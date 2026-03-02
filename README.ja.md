@@ -108,8 +108,8 @@ Smart LEDZ は Telink Mesh 上に構築された Bluetooth メッシュシステ
 
 ## 内部アーキテクチャ
 
-- Telink Mesh の ESP-IDF セッション層: `https://github.com/hrko/esp-telink-mesh`
-- Smart LEDZ プロトコル層: `https://github.com/hrko/smartledz-protocol`
+- Telink Mesh の ESP-IDF セッション層: https://github.com/hrko/esp-telink-mesh
+- Smart LEDZ プロトコル層: https://github.com/hrko/smartledz-protocol
 - ESPHome 統合層: `components/smart_ledz/`
 
 ## 免責事項 (Disclaimer)

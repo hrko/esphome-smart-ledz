@@ -110,8 +110,8 @@ Behavior:
 
 ## Internal Architecture
 
-- Telink Mesh ESP-IDF session layer: `https://github.com/hrko/esp-telink-mesh`
-- Smart LEDZ protocol layer: `https://github.com/hrko/smartledz-protocol`
+- Telink Mesh ESP-IDF session layer: https://github.com/hrko/esp-telink-mesh
+- Smart LEDZ protocol layer: https://github.com/hrko/smartledz-protocol
 - ESPHome integration layer: `components/smart_ledz/`
 
 ## Disclaimer
