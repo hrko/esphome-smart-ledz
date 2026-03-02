@@ -68,7 +68,7 @@ ESP32 を Smart LEDZ Mesh のブリッジとして動作させ、Home Assistant 
 ### `light` (`platform: smart_ledz`)
 
 - 必須: `id`, `name`, `smart_ledz_id`, `target`, `device_type`
-- 任意: `ct_duv`（デフォルト `0`、`-6/-3/0/3/6` のみ）
+- 任意: `ct_duv`（デフォルト `0`、`-6.0〜6.0`）
 - 任意: `ignore_transition`（デフォルト `true`）
 
 `device_type` は次のいずれかを指定します。

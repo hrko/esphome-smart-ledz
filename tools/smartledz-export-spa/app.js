@@ -4,7 +4,9 @@ const ID_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const MAC_PATTERN = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
 const TARGET_PATTERN = /^0x[0-9A-Fa-f]{1,4}$/;
 const VENDOR_PATTERN = /^(0x[0-9A-Fa-f]{1,4}|\d{1,5})$/;
-const CT_DUV_ALLOWED = new Set(["-6", "-3", "0", "3", "6"]);
+const CT_DUV_MIN = -6;
+const CT_DUV_MAX = 6;
+const CT_DUV_STEP = "0.1";
 const DEVICE_TYPE_ALLOWED = new Set(["dimmable", "tunable", "synca"]);
 
 const TYPE_CODE_TO_DEVICE_TYPE = new Map([
@@ -543,13 +545,6 @@ function renderLightEditors() {
       })
       .join("");
 
-    const ctdOptions = ["-6", "-3", "0", "3", "6"]
-      .map((option) => {
-        const selected = option === cfg.ctDuv ? "selected" : "";
-        return `<option value="${option}" ${selected}>${option}</option>`;
-      })
-      .join("");
-
     const sourceText =
       target.kind === "device"
         ? `device target ${target.targetHex} / type ${nullableTypeCode(target.typeCode)}`
@@ -586,7 +581,15 @@ function renderLightEditors() {
           </label>
           <label class="field">
             <span>ct_duv</span>
-            <select data-role="light-ct-duv" data-key="${escapeHtml(target.key)}">${ctdOptions}</select>
+            <input
+              data-role="light-ct-duv"
+              data-key="${escapeHtml(target.key)}"
+              type="number"
+              min="${CT_DUV_MIN}"
+              max="${CT_DUV_MAX}"
+              step="${CT_DUV_STEP}"
+              value="${escapeHtml(cfg.ctDuv)}"
+            />
           </label>
           <label class="check-field">
             <input data-role="light-ignore-transition" data-key="${escapeHtml(target.key)}" type="checkbox" ${
@@ -677,7 +680,8 @@ function updateOutputs() {
       errors.push(`Invalid device_type for ${target.label}: ${cfg.deviceType}`);
     }
 
-    if (!CT_DUV_ALLOWED.has(String(cfg.ctDuv))) {
+    const ctDuv = parseCtDuv(cfg.ctDuv);
+    if (ctDuv === null || ctDuv < CT_DUV_MIN || ctDuv > CT_DUV_MAX) {
       errors.push(`Invalid ct_duv for ${target.label}: ${cfg.ctDuv}`);
     }
 
@@ -777,7 +781,7 @@ function generateEspHomeYaml(selectedTargets) {
     lines.push("    smart_ledz_id: " + hubId);
     lines.push("    target: " + normalizedTarget);
     lines.push("    device_type: " + cfg.deviceType);
-    lines.push("    ct_duv: " + cfg.ctDuv);
+    lines.push("    ct_duv: " + normalizeCtDuv(cfg.ctDuv));
     lines.push("    ignore_transition: " + boolYaml(cfg.ignoreTransition));
     appendExtraYaml(lines, cfg.extraYaml, 4);
   }
@@ -848,8 +852,8 @@ function onLightFieldUpdate(event) {
     cfg.target = field.value.trim();
   } else if (role === "light-device-type" && field instanceof HTMLSelectElement) {
     cfg.deviceType = field.value;
-  } else if (role === "light-ct-duv" && field instanceof HTMLSelectElement) {
-    cfg.ctDuv = field.value;
+  } else if (role === "light-ct-duv" && field instanceof HTMLInputElement) {
+    cfg.ctDuv = field.value.trim();
   } else if (role === "light-ignore-transition" && field instanceof HTMLInputElement) {
     cfg.ignoreTransition = field.checked;
   } else if (role === "light-extra" && field instanceof HTMLTextAreaElement) {
@@ -912,6 +916,22 @@ function normalizeTarget(value) {
     return value;
   }
   return toHex16(numeric);
+}
+
+function parseCtDuv(value) {
+  const parsed = Number.parseFloat(String(value).trim());
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return parsed;
+}
+
+function normalizeCtDuv(value) {
+  const parsed = parseCtDuv(value);
+  if (parsed === null) {
+    return String(value).trim();
+  }
+  return Number.isInteger(parsed) ? String(parsed) : String(parsed);
 }
 
 function validateIdentifier(name, value, errors) {

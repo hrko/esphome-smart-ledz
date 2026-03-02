@@ -32,7 +32,7 @@ double clamp_duv_(double duv) {
 
 }  // namespace
 
-std::array<uint8_t, 3> lookup_ct_rgb(uint16_t kelvin, int8_t duv) {
+std::array<uint8_t, 3> lookup_ct_rgb(uint16_t kelvin, float duv) {
   const double cct = clamp_cct_(static_cast<double>(kelvin));
   const double y = clamp_duv_(static_cast<double>(duv));
   const double x = std::log(cct);
@@ -83,7 +83,7 @@ std::array<uint8_t, 3> lookup_ct_rgb(uint16_t kelvin, int8_t duv) {
   return {clip_and_round_channel_(red), clip_and_round_channel_(green), clip_and_round_channel_(blue)};
 }
 
-uint16_t estimate_cct_from_rgb(uint8_t target_red, uint8_t target_green, uint8_t target_blue, int8_t duv) {
+uint16_t estimate_cct_from_rgb(uint8_t target_red, uint8_t target_green, uint8_t target_blue, float duv) {
   int best_error = std::numeric_limits<int>::max();
   uint16_t best_cct = 1800;
 

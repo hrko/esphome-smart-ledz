@@ -22,20 +22,13 @@ DEVICE_TYPE_OPTIONS = {
     "synca": SmartLedzDeviceType.SMART_LEDZ_DEVICE_TYPE_SYNCA,
 }
 
-
-def validate_ct_duv(value):
-    value = cv.int_(value)
-    if value not in (-6, -3, 0, 3, 6):
-        raise cv.Invalid("ct_duv must be one of: -6, -3, 0, 3, 6")
-    return value
-
 CONFIG_SCHEMA = light.BRIGHTNESS_ONLY_LIGHT_SCHEMA.extend(
     {
         cv.GenerateID(CONF_OUTPUT_ID): cv.declare_id(SmartLedzLightOutput),
         cv.GenerateID(CONF_SMART_LEDZ_ID): cv.use_id(SmartLedzHub),
         cv.Required(CONF_TARGET): cv.hex_uint16_t,
         cv.Required(CONF_DEVICE_TYPE): cv.enum(DEVICE_TYPE_OPTIONS, lower=True),
-        cv.Optional(CONF_CT_DUV, default=0): validate_ct_duv,
+        cv.Optional(CONF_CT_DUV, default=0): cv.float_range(min=-6, max=6),
         cv.Optional(CONF_IGNORE_TRANSITION, default=True): cv.boolean,
     }
 )
