@@ -2,7 +2,7 @@
 
 #ifdef USE_ESP32
 
-#include "../smartledz_protocol_v1_color_math.h"
+#include <smartledz_protocol/v1/color_math.h>
 #include "esphome/core/log.h"
 
 #include <algorithm>

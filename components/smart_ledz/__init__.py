@@ -14,6 +14,12 @@ CONF_VENDOR_ID = "vendor_id"
 DEPENDENCIES = ["ble_client"]
 AUTO_LOAD = ["ble_client"]
 MULTI_CONF = True
+ESP_TELINK_MESH_REPOSITORY = (
+    "https://github.com/hrko/esp-telink-mesh.git#326d7762a0b859cd36e6f244e4012498777c452a"
+)
+SMARTLEDZ_PROTOCOL_REPOSITORY = (
+    "https://github.com/hrko/smartledz-protocol.git#2afbab0741dd151a295650fd52483e5f1c719bad"
+)
 
 smart_ledz_ns = cg.esphome_ns.namespace("smart_ledz")
 SmartLedzHub = smart_ledz_ns.class_(
@@ -38,6 +44,8 @@ CONFIG_SCHEMA = (
 
 
 async def to_code(config):
+    cg.add_library("esp-telink-mesh", None, ESP_TELINK_MESH_REPOSITORY)
+    cg.add_library("smartledz-protocol", None, SMARTLEDZ_PROTOCOL_REPOSITORY)
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await ble_client.register_ble_node(var, config)

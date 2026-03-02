@@ -16,12 +16,12 @@ The component is split into three layers.
 - Owns scheduling concerns: TX queue, poll timing, listener fanout.
 
 2. ESP transport/session layer (`esp_telink_mesh::v1`)
-- Path: `components/smart_ledz/esp_telink_mesh_v1_*`
+- Path: external PlatformIO library `esp-telink-mesh`
 - Depends on ESP-IDF only.
 - Owns Telink pairing/session key lifecycle, packet crypto, GATT write/read/notify decode.
 
 3. Product protocol layer (`smartledz_protocol::v1`)
-- Path: `components/smart_ledz/smartledz_protocol_v1_*`
+- Path: external PlatformIO library `smartledz-protocol`
 - Pure C++ (STL only).
 - Owns Smart LEDZ opcode/payload builders, notify payload parsing, device state patch logic, and CT/RGB conversion.
 
@@ -41,4 +41,4 @@ The component is split into three layers.
 ## Planned Next Steps
 
 - Add reusable test vectors for crypto and protocol frames.
-- Extract `esp_telink_mesh_v1_*` and `smartledz_protocol_v1_*` into standalone repositories once API is proven stable.
+- Add CI checks in `esp-telink-mesh` and `smartledz-protocol` to keep API compatibility explicit.

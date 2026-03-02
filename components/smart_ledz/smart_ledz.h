@@ -6,8 +6,8 @@
 #include "esphome/components/esp32_ble_tracker/esp32_ble_tracker.h"
 #include "esphome/core/component.h"
 
-#include "esp_telink_mesh_v1_session_client.h"
-#include "smartledz_protocol_v1_state_codec.h"
+#include <esp_telink_mesh/v1/session_client.h>
+#include <smartledz_protocol/v1/state_codec.h>
 
 #include <array>
 #include <cstddef>

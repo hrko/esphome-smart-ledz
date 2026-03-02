@@ -48,8 +48,8 @@ ESP32 を Smart LEDZ Mesh のブリッジとして動作させ、Home Assistant 
 
 ## 内部アーキテクチャ
 
-- Telink Mesh の ESP-IDF セッション層: `components/smart_ledz/esp_telink_mesh_v1_*`
-- Smart LEDZ プロトコル層（純粋 C++）: `components/smart_ledz/smartledz_protocol_v1_*`
+- Telink Mesh の ESP-IDF セッション層: `https://github.com/hrko/esp-telink-mesh`
+- Smart LEDZ プロトコル層（純粋 C++）: `https://github.com/hrko/smartledz-protocol`
 - ESPHome 統合層（Hub/Light）: `components/smart_ledz/`
 
 詳細は `ARCHITECTURE.md` を参照してください。

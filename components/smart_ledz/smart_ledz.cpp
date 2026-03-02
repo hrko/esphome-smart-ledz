@@ -5,7 +5,7 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
-#include "smartledz_protocol_v1_commands.h"
+#include <smartledz_protocol/v1/commands.h>
 
 #include <algorithm>
 
