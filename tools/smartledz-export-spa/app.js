@@ -8,6 +8,7 @@ const COMMIT_SHA_PATTERN = /^[0-9A-Fa-f]{40}$/;
 const CT_DUV_MIN = -6;
 const CT_DUV_MAX = 6;
 const CT_DUV_STEP = "0.1";
+const DUV_NUMBER_STEP_DEFAULT = "0.1";
 const DEVICE_TYPE_ALLOWED = new Set(["dimmable", "tunable", "synca"]);
 const SOURCE_REPO_OWNER = "hrko";
 const SOURCE_REPO_NAME = "esphome-smart-ledz";
@@ -527,8 +528,20 @@ function buildDefaultLightConfig(target) {
     target: target.targetHex,
     deviceType: inferDeviceType(target.typeCode),
     ctDuv: "0",
+    duvNumber: buildDefaultDuvNumberConfig(),
     ignoreTransition: true,
     extraYaml: "",
+  };
+}
+
+function buildDefaultDuvNumberConfig() {
+  return {
+    enabled: false,
+    name: "",
+    id: "",
+    initialValue: "",
+    step: DUV_NUMBER_STEP_DEFAULT,
+    restoreValue: false,
   };
 }
 
@@ -634,6 +647,7 @@ function renderTargetList(container, items, getSubText) {
 
 function renderLightEditors() {
   const selectedTargets = getSelectedTargets();
+  const openAdvancedKeys = collectOpenLightAdvancedKeys();
   refs.lightEditorList.innerHTML = "";
 
   if (selectedTargets.length === 0) {
@@ -646,6 +660,8 @@ function renderLightEditors() {
 
   for (const target of selectedTargets) {
     const cfg = ensureLightConfig(target);
+    const duvNumber = ensureDuvNumberConfig(cfg);
+    const isSynca = cfg.deviceType === "synca";
     const card = document.createElement("article");
     card.className = "light-card";
 
@@ -661,6 +677,61 @@ function renderLightEditors() {
         ? `device target ${target.targetHex} / type ${nullableTypeCode(target.typeCode)}`
         : `group target ${target.targetHex} (low ${target.lowByte}) / type ${nullableTypeCode(target.typeCode)}`;
 
+    const duvNumberBlock = isSynca
+      ? `
+        <div class="duv-number-panel">
+          <label class="check-field">
+            <input data-role="light-duv-number-enabled" data-key="${escapeHtml(target.key)}" type="checkbox" ${
+              duvNumber.enabled ? "checked" : ""
+            } />
+            <span>Emit duv_number override</span>
+          </label>
+          <p class="muted duv-note">
+            If omitted, synca lights still get auto-created duv_number defaults from the component.
+          </p>
+          <div class="light-grid-fields light-grid-duv-fields ${duvNumber.enabled ? "" : "is-hidden"}">
+            <label class="field">
+              <span>duv_number.name (optional)</span>
+              <input data-role="light-duv-number-name" data-key="${escapeHtml(target.key)}" type="text" value="${escapeHtml(duvNumber.name)}" />
+            </label>
+            <label class="field">
+              <span>duv_number.id (optional)</span>
+              <input data-role="light-duv-number-id" data-key="${escapeHtml(target.key)}" type="text" value="${escapeHtml(duvNumber.id)}" />
+            </label>
+            <label class="field">
+              <span>duv_number.initial_value (optional)</span>
+              <input
+                data-role="light-duv-number-initial"
+                data-key="${escapeHtml(target.key)}"
+                type="number"
+                min="${CT_DUV_MIN}"
+                max="${CT_DUV_MAX}"
+                step="${CT_DUV_STEP}"
+                value="${escapeHtml(duvNumber.initialValue)}"
+              />
+            </label>
+            <label class="field">
+              <span>duv_number.step (optional)</span>
+              <input
+                data-role="light-duv-number-step"
+                data-key="${escapeHtml(target.key)}"
+                type="number"
+                min="0.001"
+                step="${DUV_NUMBER_STEP_DEFAULT}"
+                value="${escapeHtml(duvNumber.step)}"
+              />
+            </label>
+            <label class="check-field">
+              <input data-role="light-duv-number-restore" data-key="${escapeHtml(target.key)}" type="checkbox" ${
+                duvNumber.restoreValue ? "checked" : ""
+              } />
+              <span>duv_number.restore_value</span>
+            </label>
+          </div>
+        </div>
+      `
+      : "";
+
     card.innerHTML = `
       <div class="light-card-header">
         <div>
@@ -675,7 +746,7 @@ function renderLightEditors() {
           <input data-role="light-name" data-key="${escapeHtml(target.key)}" type="text" value="${escapeHtml(cfg.name)}" />
         </label>
       </div>
-      <details class="advanced-block">
+      <details class="advanced-block" data-key="${escapeHtml(target.key)}" ${openAdvancedKeys.has(target.key) ? "open" : ""}>
         <summary>Advanced Light Settings</summary>
         <div class="light-grid-fields">
           <label class="field">
@@ -709,6 +780,7 @@ function renderLightEditors() {
             <span>ignore_transition</span>
           </label>
         </div>
+        ${duvNumberBlock}
         <label class="field">
           <span>Light Extra YAML Lines</span>
           <textarea data-role="light-extra" data-key="${escapeHtml(target.key)}" rows="3" placeholder="example:\ndefault_transition_length: 0s">${escapeHtml(
@@ -720,6 +792,25 @@ function renderLightEditors() {
 
     refs.lightEditorList.appendChild(card);
   }
+}
+
+function collectOpenLightAdvancedKeys() {
+  const openKeys = new Set();
+  if (!refs.lightEditorList) {
+    return openKeys;
+  }
+
+  const detailsList = refs.lightEditorList.querySelectorAll("details.advanced-block[data-key]");
+  for (const details of detailsList) {
+    if (!(details instanceof HTMLDetailsElement) || !details.open) {
+      continue;
+    }
+    const key = details.dataset.key;
+    if (key) {
+      openKeys.add(key);
+    }
+  }
+  return openKeys;
 }
 
 function updateOutputs() {
@@ -798,6 +889,34 @@ function updateOutputs() {
     const ctDuv = parseCtDuv(cfg.ctDuv);
     if (ctDuv === null || ctDuv < CT_DUV_MIN || ctDuv > CT_DUV_MAX) {
       errors.push(`Invalid ct_duv for ${target.label}: ${cfg.ctDuv}`);
+    }
+
+    const duvNumber = ensureDuvNumberConfig(cfg);
+    if (duvNumber.enabled && cfg.deviceType !== "synca") {
+      errors.push(`duv_number override for ${target.label} is supported only when device_type is synca.`);
+    }
+
+    if (duvNumber.enabled) {
+      const duvNumberId = duvNumber.id.trim();
+      if (duvNumberId && !ID_PATTERN.test(duvNumberId)) {
+        errors.push(`Invalid duv_number.id for ${target.label}: ${duvNumber.id}`);
+      }
+
+      const duvInitial = duvNumber.initialValue.trim();
+      if (duvInitial) {
+        const parsedInitial = parseCtDuv(duvInitial);
+        if (parsedInitial === null || parsedInitial < CT_DUV_MIN || parsedInitial > CT_DUV_MAX) {
+          errors.push(`Invalid duv_number.initial_value for ${target.label}: ${duvNumber.initialValue}`);
+        }
+      }
+
+      const duvStep = duvNumber.step.trim();
+      if (duvStep) {
+        const parsedStep = parsePositiveFloat(duvStep);
+        if (parsedStep === null) {
+          errors.push(`Invalid duv_number.step for ${target.label}: ${duvNumber.step}`);
+        }
+      }
     }
 
     if (cfg.extraYaml.trim()) {
@@ -897,6 +1016,7 @@ function generateEspHomeYaml(selectedTargets) {
     lines.push("    target: " + normalizedTarget);
     lines.push("    device_type: " + cfg.deviceType);
     lines.push("    ct_duv: " + normalizeCtDuv(cfg.ctDuv));
+    appendDuvNumberYaml(lines, cfg);
     lines.push("    ignore_transition: " + boolYaml(cfg.ignoreTransition));
     appendExtraYaml(lines, cfg.extraYaml, 4);
   }
@@ -936,6 +1056,30 @@ function appendExtraYaml(lines, rawText, indentSpaces) {
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .forEach((line) => lines.push(indent + line));
+}
+
+function appendDuvNumberYaml(lines, cfg) {
+  const duvNumber = ensureDuvNumberConfig(cfg);
+  if (cfg.deviceType !== "synca" || !duvNumber.enabled) {
+    return;
+  }
+
+  lines.push("    duv_number:");
+  if (duvNumber.name.trim()) {
+    lines.push("      name: " + yamlQuote(duvNumber.name.trim()));
+  }
+  if (duvNumber.id.trim()) {
+    lines.push("      id: " + duvNumber.id.trim());
+  }
+  if (duvNumber.initialValue.trim()) {
+    lines.push("      initial_value: " + normalizeCtDuv(duvNumber.initialValue));
+  }
+  if (duvNumber.step.trim() && duvNumber.step.trim() !== DUV_NUMBER_STEP_DEFAULT) {
+    lines.push("      step: " + normalizePositiveFloat(duvNumber.step));
+  }
+  if (duvNumber.restoreValue) {
+    lines.push("      restore_value: true");
+  }
 }
 
 function onTargetToggle(event) {
@@ -982,8 +1126,25 @@ function onLightFieldUpdate(event) {
     cfg.target = field.value.trim();
   } else if (role === "light-device-type" && field instanceof HTMLSelectElement) {
     cfg.deviceType = field.value;
+    if (cfg.deviceType !== "synca") {
+      ensureDuvNumberConfig(cfg).enabled = false;
+      renderLightEditors();
+    }
   } else if (role === "light-ct-duv" && field instanceof HTMLInputElement) {
     cfg.ctDuv = field.value.trim();
+  } else if (role === "light-duv-number-enabled" && field instanceof HTMLInputElement) {
+    ensureDuvNumberConfig(cfg).enabled = field.checked;
+    renderLightEditors();
+  } else if (role === "light-duv-number-name" && field instanceof HTMLInputElement) {
+    ensureDuvNumberConfig(cfg).name = field.value;
+  } else if (role === "light-duv-number-id" && field instanceof HTMLInputElement) {
+    ensureDuvNumberConfig(cfg).id = field.value.trim();
+  } else if (role === "light-duv-number-initial" && field instanceof HTMLInputElement) {
+    ensureDuvNumberConfig(cfg).initialValue = field.value.trim();
+  } else if (role === "light-duv-number-step" && field instanceof HTMLInputElement) {
+    ensureDuvNumberConfig(cfg).step = field.value.trim();
+  } else if (role === "light-duv-number-restore" && field instanceof HTMLInputElement) {
+    ensureDuvNumberConfig(cfg).restoreValue = field.checked;
   } else if (role === "light-ignore-transition" && field instanceof HTMLInputElement) {
     cfg.ignoreTransition = field.checked;
   } else if (role === "light-extra" && field instanceof HTMLTextAreaElement) {
@@ -1013,8 +1174,17 @@ function ensureLightConfig(target) {
   if (!cfg) {
     cfg = buildDefaultLightConfig(target);
     state.lightConfigs.set(target.key, cfg);
+  } else if (!cfg.duvNumber || typeof cfg.duvNumber !== "object") {
+    cfg.duvNumber = buildDefaultDuvNumberConfig();
   }
   return cfg;
+}
+
+function ensureDuvNumberConfig(cfg) {
+  if (!cfg.duvNumber || typeof cfg.duvNumber !== "object") {
+    cfg.duvNumber = buildDefaultDuvNumberConfig();
+  }
+  return cfg.duvNumber;
 }
 
 function getAllTargets() {
@@ -1062,6 +1232,22 @@ function normalizeCtDuv(value) {
     return String(value).trim();
   }
   return Number.isInteger(parsed) ? String(parsed) : String(parsed);
+}
+
+function parsePositiveFloat(value) {
+  const parsed = Number.parseFloat(String(value).trim());
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}
+
+function normalizePositiveFloat(value) {
+  const parsed = parsePositiveFloat(value);
+  if (parsed === null) {
+    return String(value).trim();
+  }
+  return String(parsed);
 }
 
 function validateIdentifier(name, value, errors) {

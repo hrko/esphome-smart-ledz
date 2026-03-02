@@ -33,4 +33,6 @@ Generated YAML includes exactly these top-level sections:
 - `mesh_name` and `mesh_password` are emitted as `!secret` references.
 - BLE Client device can generally be any available mesh device.
 - Group target default is `0x8000 | group_low_byte`.
+- For `synca` lights, you can optionally emit a `duv_number` override block from the light editor.
+- If `duv_number` override is not emitted, the component-side default auto-creation for `synca` is used.
 - Extra YAML lines are inserted as-is; verify syntax before use.

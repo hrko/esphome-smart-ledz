@@ -381,6 +381,26 @@ textarea {
   grid-template-columns: 1fr;
 }
 
+.light-grid-duv-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.duv-number-panel {
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+}
+
+.duv-note {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+}
+
+.is-hidden {
+  display: none;
+}
+
 .placeholder {
   border: 1px dashed var(--line);
   background: #fff;
