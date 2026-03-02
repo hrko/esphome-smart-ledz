@@ -9,13 +9,6 @@
 
 #include <algorithm>
 
-// ESPHome external components compile only fixed translation units for each component.
-// Include modular library implementations here so separated modules are linked.
-#include "esp_telink_mesh_v1_session_client.cpp"
-#include "smartledz_protocol_v1_commands.cpp"
-#include "smartledz_protocol_v1_state_codec.cpp"
-#include "smartledz_protocol_v1_color_math.cpp"
-
 namespace esphome {
 namespace smart_ledz {
 
