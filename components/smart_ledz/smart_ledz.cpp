@@ -5,14 +5,16 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
+#include "smartledz_protocol_v1_commands.h"
+
 #include <algorithm>
-#include <array>
-#include <cstring>
 
-#include <esp_random.h>
-
-#define MBEDTLS_AES_ALT
-#include <aes_alt.h>
+// ESPHome external components compile only fixed translation units for each component.
+// Include modular library implementations here so separated modules are linked.
+#include "esp_telink_mesh_v1_session_client.cpp"
+#include "smartledz_protocol_v1_commands.cpp"
+#include "smartledz_protocol_v1_state_codec.cpp"
+#include "smartledz_protocol_v1_color_math.cpp"
 
 namespace esphome {
 namespace smart_ledz {
@@ -20,11 +22,6 @@ namespace smart_ledz {
 namespace {
 
 static const char *const TAG = "smart_ledz";
-constexpr uint8_t OPCODE_ON_OFF = 0xD0;
-constexpr uint8_t OPCODE_BRIGHTNESS = 0xD2;
-constexpr uint8_t OPCODE_COLOR = 0xE2;
-constexpr uint8_t OPCODE_STATUS_QUERY = 0xDA;
-constexpr uint8_t OPCODE_DIMMING_QUERY = 0xF0;
 constexpr uint32_t VERIFY_DELAY_MS = 200;
 
 const espbt::ESPBTUUID TELINK_SERVICE_UUID = espbt::ESPBTUUID::from_raw("00010203-0405-0607-0809-0a0b0c0d1910");
@@ -32,69 +29,30 @@ const espbt::ESPBTUUID TELINK_NOTIFY_UUID = espbt::ESPBTUUID::from_raw("00010203
 const espbt::ESPBTUUID TELINK_CONTROL_UUID = espbt::ESPBTUUID::from_raw("00010203-0405-0607-0809-0a0b0c0d1912");
 const espbt::ESPBTUUID TELINK_PAIR_UUID = espbt::ESPBTUUID::from_raw("00010203-0405-0607-0809-0a0b0c0d1914");
 
-std::array<uint8_t, 16> mesh_xor_key(const std::string &name, const std::string &password) {
-  std::array<uint8_t, 16> out{};
-  for (size_t i = 0; i < out.size(); i++) {
-    const auto a = static_cast<uint8_t>(i < name.size() ? name[i] : 0);
-    const auto b = static_cast<uint8_t>(i < password.size() ? password[i] : 0);
-    out[i] = a ^ b;
-  }
-  return out;
-}
-
-bool aes_encrypt_telink(const std::array<uint8_t, 16> &key, const std::array<uint8_t, 16> &data,
-                        std::array<uint8_t, 16> *out) {
-  uint8_t key_rev[16];
-  uint8_t data_rev[16];
-  uint8_t enc_rev[16];
-
-  for (size_t i = 0; i < 16; i++) {
-    key_rev[i] = key[15 - i];
-    data_rev[i] = data[15 - i];
-  }
-
-  mbedtls_aes_context ctx;
-  mbedtls_aes_init(&ctx);
-  auto key_status = mbedtls_aes_setkey_enc(&ctx, key_rev, 128);
-  if (key_status != 0) {
-    mbedtls_aes_free(&ctx);
-    return false;
-  }
-  auto enc_status = mbedtls_aes_crypt_ecb(&ctx, ESP_AES_ENCRYPT, data_rev, enc_rev);
-  mbedtls_aes_free(&ctx);
-  if (enc_status != 0) {
-    return false;
-  }
-
-  for (size_t i = 0; i < 16; i++) {
-    (*out)[i] = enc_rev[15 - i];
-  }
-  return true;
-}
-
-bool key_encrypt(const std::string &mesh_name, const std::string &mesh_password, const std::array<uint8_t, 16> &key,
-                 std::array<uint8_t, 16> *out) {
-  return aes_encrypt_telink(key, mesh_xor_key(mesh_name, mesh_password), out);
-}
-
-bool generate_session_key(const std::string &mesh_name, const std::string &mesh_password,
-                          const std::array<uint8_t, 8> &data1, const uint8_t *data2_8,
-                          std::array<uint8_t, 16> *out) {
-  std::array<uint8_t, 16> data{};
-  for (size_t i = 0; i < 8; i++) {
-    data[i] = data1[i];
-    data[8 + i] = data2_8[i];
-  }
-  return aes_encrypt_telink(mesh_xor_key(mesh_name, mesh_password), data, out);
-}
-
 }  // namespace
+
+void SmartLedzHub::configure_session_() { this->session_.configure(this->mesh_name_, this->mesh_password_, this->vendor_id_); }
+
+void SmartLedzHub::set_mesh_name(const std::string &mesh_name) {
+  this->mesh_name_ = mesh_name;
+  this->configure_session_();
+}
+
+void SmartLedzHub::set_mesh_password(const std::string &mesh_password) {
+  this->mesh_password_ = mesh_password;
+  this->configure_session_();
+}
+
+void SmartLedzHub::set_vendor_id(uint16_t vendor_id) {
+  this->vendor_id_ = vendor_id;
+  this->configure_session_();
+}
 
 void SmartLedzHub::dump_config() {
   ESP_LOGCONFIG(TAG, "Smart LEDZ Hub:");
   ESP_LOGCONFIG(TAG, "  Address: %s", this->parent_->address_str());
   ESP_LOGCONFIG(TAG, "  Vendor: 0x%04X", this->vendor_id_);
-  ESP_LOGCONFIG(TAG, "  Session Ready: %s", YESNO(this->session_ready_));
+  ESP_LOGCONFIG(TAG, "  Session Ready: %s", YESNO(this->session_.is_session_ready()));
   ESP_LOGCONFIG(TAG, "  Poll Interval: %ums", this->poll_interval_ms_);
   ESP_LOGCONFIG(TAG, "  TX Interval: %ums", this->tx_interval_ms_);
   ESP_LOGCONFIG(TAG, "  Power-on Settle: %ums", this->power_on_settle_ms_);
@@ -129,7 +87,7 @@ void SmartLedzHub::register_polled_target(uint16_t target) {
 }
 
 void SmartLedzHub::loop() {
-  if (!this->session_ready_) {
+  if (!this->session_.is_session_ready()) {
     return;
   }
 
@@ -201,292 +159,50 @@ bool SmartLedzHub::discover_characteristics_() {
     return false;
   }
 
-  this->notify_handle_ = notify->handle;
-  this->control_handle_ = control->handle;
-  this->pair_handle_ = pair->handle;
+  this->session_.set_characteristic_handles(notify->handle, control->handle, pair->handle);
 
   ESP_LOGD(TAG, "[%s] handles: notify=0x%04X control=0x%04X pair=0x%04X", this->parent_->address_str(),
-           this->notify_handle_, this->control_handle_, this->pair_handle_);
+           notify->handle, control->handle, pair->handle);
 
   return true;
-}
-
-void SmartLedzHub::update_mac_data_() {
-  const uint8_t *mac = this->parent_->get_remote_bda();
-  this->mac_data_[0] = mac[5];
-  this->mac_data_[1] = mac[4];
-  this->mac_data_[2] = mac[3];
-  this->mac_data_[3] = mac[2];
-  this->mac_data_[4] = mac[1];
-  this->mac_data_[5] = mac[0];
-}
-
-void SmartLedzHub::begin_pairing_() {
-  this->update_mac_data_();
-
-  std::array<uint8_t, 16> pair_data{};
-  esp_fill_random(this->pair_random_.data(), this->pair_random_.size());
-  for (size_t i = 0; i < this->pair_random_.size(); i++) {
-    pair_data[i] = this->pair_random_[i];
-  }
-
-  std::array<uint8_t, 16> enc_data{};
-  if (!key_encrypt(this->mesh_name_, this->mesh_password_, pair_data, &enc_data)) {
-    ESP_LOGE(TAG, "[%s] key_encrypt failed", this->parent_->address_str());
-    this->parent_->disconnect();
-    return;
-  }
-
-  uint8_t packet[17] = {0};
-  packet[0] = 0x0C;
-  for (size_t i = 0; i < 8; i++) {
-    packet[1 + i] = pair_data[i];
-    packet[9 + i] = enc_data[i];
-  }
-
-  auto status = esp_ble_gattc_write_char(this->parent_->get_gattc_if(), this->parent_->get_conn_id(), this->pair_handle_,
-                                         sizeof(packet), packet, ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
-  if (status != ESP_GATT_OK) {
-    ESP_LOGW(TAG, "[%s] pair write failed, status=%d", this->parent_->address_str(), status);
-    this->parent_->disconnect();
-    return;
-  }
-
-  this->pairing_write_pending_ = true;
-}
-
-bool SmartLedzHub::write_notify_enable_() {
-  uint8_t value = 0x01;
-  auto status = esp_ble_gattc_write_char(this->parent_->get_gattc_if(), this->parent_->get_conn_id(), this->notify_handle_,
-                                         sizeof(value), &value, ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
-  if (status == ESP_GATT_OK) {
-    this->notify_enable_pending_ = true;
-    return true;
-  }
-
-  status = esp_ble_gattc_write_char(this->parent_->get_gattc_if(), this->parent_->get_conn_id(), this->notify_handle_,
-                                    sizeof(value), &value, ESP_GATT_WRITE_TYPE_NO_RSP, ESP_GATT_AUTH_REQ_NONE);
-  if (status != ESP_GATT_OK) {
-    ESP_LOGW(TAG, "[%s] notify enable write failed, status=%d", this->parent_->address_str(), status);
-    return false;
-  }
-
-  this->node_state = espbt::ClientState::ESTABLISHED;
-  ESP_LOGI(TAG, "[%s] Smart LEDZ session established (notify write no-rsp)", this->parent_->address_str());
-  return true;
-}
-
-bool SmartLedzHub::register_notify_() {
-  auto status = esp_ble_gattc_register_for_notify(this->parent_->get_gattc_if(), this->parent_->get_remote_bda(),
-                                                  this->notify_handle_);
-  if (status != ESP_GATT_OK) {
-    ESP_LOGW(TAG, "[%s] register_for_notify failed status=%d", this->parent_->address_str(), status);
-    return false;
-  }
-  this->notify_register_pending_ = true;
-  return true;
-}
-
-void SmartLedzHub::handle_pairing_response_(const uint8_t *data, uint16_t len) {
-  if (len < 9) {
-    ESP_LOGW(TAG, "[%s] invalid pairing response len=%u", this->parent_->address_str(), len);
-    this->parent_->disconnect();
-    return;
-  }
-
-  if (!generate_session_key(this->mesh_name_, this->mesh_password_, this->pair_random_, data + 1, &this->session_key_)) {
-    ESP_LOGW(TAG, "[%s] session key generation failed", this->parent_->address_str());
-    this->parent_->disconnect();
-    return;
-  }
-
-  this->session_ready_ = true;
-  this->packet_count_ = static_cast<uint16_t>(esp_random() & 0xFFFF);
-  if (this->packet_count_ == 0) {
-    this->packet_count_ = 1;
-  }
-
-  if (!this->register_notify_()) {
-    this->write_notify_enable_();
-  }
-
-  ESP_LOGI(TAG, "[%s] Smart LEDZ session key ready", this->parent_->address_str());
 }
 
 void SmartLedzHub::update_device_from_online_status_(const uint8_t *payload10, size_t payload_len) {
-  size_t i = 0;
-  while (i + 3 < payload_len) {
-    const uint8_t addr = payload10[i];
-    const uint8_t status = payload10[i + 1];
-    const uint8_t brightness = payload10[i + 2];
-    const uint8_t type_raw = payload10[i + 3];
-    i += 4;
-
-    if (addr == 0 || (addr == 0xFF && brightness == 0xFF)) {
-      break;
-    }
-
-    auto &state = this->state_ref_(addr);
-    state.seen = true;
-    state.online_status = status;
-    state.has_online_brightness = true;
-    state.online_brightness = brightness;
-    state.has_power = true;
-    state.power = (status != 0) && (brightness != 0);
-    state.has_brightness = true;
-    state.brightness = brightness;
-    state.type_raw = type_raw;
-    state.last_update_ms = millis();
-    this->notify_state_update_(addr);
+  std::vector<uint16_t> updated_addresses;
+  smartledz_protocol::v1::apply_online_status_payload(payload10, payload_len, millis(), &this->device_states_,
+                                                       &updated_addresses);
+  for (const auto address : updated_addresses) {
+    this->notify_state_update_(address);
   }
 }
 
 void SmartLedzHub::update_device_from_status_(uint16_t src, const uint8_t *payload10, size_t payload_len) {
-  if (payload_len < 4) {
-    return;
+  std::vector<uint16_t> updated_addresses;
+  smartledz_protocol::v1::apply_status_payload(src, payload10, payload_len, millis(), &this->device_states_,
+                                               &updated_addresses);
+  for (const auto address : updated_addresses) {
+    this->notify_state_update_(address);
   }
-
-  auto &state = this->state_ref_(src);
-  state.seen = true;
-  state.last_update_ms = millis();
-
-  const uint8_t b0 = payload10[0];
-  const uint8_t b1 = payload10[1];
-  const uint8_t b2 = payload10[2];
-  const uint8_t b3 = payload10[3];
-
-  state.has_rgb = true;
-  state.rgb = {b0, b1, b2};
-  state.has_brightness = false;
-  if (18 <= b3 && b3 <= 65) {
-    state.has_ct = true;
-    state.ct_raw = b3;
-  }
-  this->notify_state_update_(src);
 }
 
 void SmartLedzHub::update_device_from_f1_response_(uint16_t src, const uint8_t *payload10, size_t payload_len) {
-  if (payload_len < 7 || payload10[0] != 0xF1) {
-    return;
-  }
-
-  const uint8_t func = payload10[2];
-  const uint8_t item = payload10[3];
-  const uint8_t data_len = payload10[5];
-
-  if (func != 1 || item != 4 || data_len < 1 || payload_len < static_cast<size_t>(6 + data_len)) {
-    return;
-  }
-
-  auto &state = this->state_ref_(src);
-  state.seen = true;
-  state.has_brightness = true;
-  state.brightness = payload10[6];
-  state.last_update_ms = millis();
-  this->notify_state_update_(src);
-}
-
-void SmartLedzHub::encrypt_packet_(uint8_t *packet20) const {
-  std::array<uint8_t, 16> auth_nonce{};
-  auth_nonce[0] = this->mac_data_[0];
-  auth_nonce[1] = this->mac_data_[1];
-  auth_nonce[2] = this->mac_data_[2];
-  auth_nonce[3] = this->mac_data_[3];
-  auth_nonce[4] = 0x01;
-  auth_nonce[5] = packet20[0];
-  auth_nonce[6] = packet20[1];
-  auth_nonce[7] = packet20[2];
-  auth_nonce[8] = 15;
-
-  std::array<uint8_t, 16> authenticator{};
-  aes_encrypt_telink(this->session_key_, auth_nonce, &authenticator);
-  for (size_t i = 0; i < 15; i++) {
-    authenticator[i] ^= packet20[i + 5];
-  }
-
-  std::array<uint8_t, 16> mic{};
-  aes_encrypt_telink(this->session_key_, authenticator, &mic);
-  packet20[3] = mic[0];
-  packet20[4] = mic[1];
-
-  std::array<uint8_t, 16> iv{};
-  iv[1] = this->mac_data_[0];
-  iv[2] = this->mac_data_[1];
-  iv[3] = this->mac_data_[2];
-  iv[4] = this->mac_data_[3];
-  iv[5] = 0x01;
-  iv[6] = packet20[0];
-  iv[7] = packet20[1];
-  iv[8] = packet20[2];
-
-  std::array<uint8_t, 16> stream{};
-  aes_encrypt_telink(this->session_key_, iv, &stream);
-  for (size_t i = 0; i < 15; i++) {
-    packet20[i + 5] ^= stream[i];
-  }
-}
-
-void SmartLedzHub::decrypt_packet_(uint8_t *packet20) const {
-  std::array<uint8_t, 16> iv{};
-  iv[0] = this->mac_data_[0];
-  iv[1] = this->mac_data_[1];
-  iv[2] = this->mac_data_[2];
-  iv[3] = packet20[0];
-  iv[4] = packet20[1];
-  iv[5] = packet20[2];
-  iv[6] = packet20[3];
-  iv[7] = packet20[4];
-
-  std::array<uint8_t, 16> plaintext{};
-  plaintext[0] = 0;
-  for (size_t i = 0; i < 15; i++) {
-    plaintext[i + 1] = iv[i];
-  }
-
-  std::array<uint8_t, 16> stream{};
-  aes_encrypt_telink(this->session_key_, plaintext, &stream);
-  for (size_t i = 0; i + 7 < 20; i++) {
-    packet20[i + 7] ^= stream[i];
+  std::vector<uint16_t> updated_addresses;
+  smartledz_protocol::v1::apply_f1_response_payload(src, payload10, payload_len, millis(), &this->device_states_,
+                                                    &updated_addresses);
+  for (const auto address : updated_addresses) {
+    this->notify_state_update_(address);
   }
 }
 
 bool SmartLedzHub::send_packet_now_(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len) {
-  if (!this->session_ready_) {
+  if (!this->session_.is_session_ready()) {
     ESP_LOGW(TAG, "[%s] cannot send packet before pairing", this->parent_->address_str());
     return false;
   }
-  if (this->control_handle_ == 0) {
-    ESP_LOGW(TAG, "[%s] control handle not ready", this->parent_->address_str());
+
+  if (!this->session_.send_mesh_command(target, opcode, payload, payload_len)) {
+    ESP_LOGW(TAG, "[%s] send_packet failed", this->parent_->address_str());
     return false;
-  }
-
-  uint8_t packet[20] = {0};
-  packet[0] = this->packet_count_ & 0xFF;
-  packet[1] = (this->packet_count_ >> 8) & 0xFF;
-  packet[5] = target & 0xFF;
-  packet[6] = (target >> 8) & 0xFF;
-  packet[7] = opcode;
-  packet[8] = this->vendor_id_ & 0xFF;
-  packet[9] = (this->vendor_id_ >> 8) & 0xFF;
-
-  auto data_len = std::min(payload_len, static_cast<size_t>(10));
-  for (size_t i = 0; i < data_len; i++) {
-    packet[10 + i] = payload[i];
-  }
-
-  this->encrypt_packet_(packet);
-
-  auto status = esp_ble_gattc_write_char(this->parent_->get_gattc_if(), this->parent_->get_conn_id(),
-                                         this->control_handle_, sizeof(packet), packet,
-                                         ESP_GATT_WRITE_TYPE_NO_RSP, ESP_GATT_AUTH_REQ_NONE);
-  if (status != ESP_GATT_OK) {
-    ESP_LOGW(TAG, "[%s] send_packet write failed status=%d", this->parent_->address_str(), status);
-    return false;
-  }
-
-  this->packet_count_++;
-  if (this->packet_count_ == 0) {
-    this->packet_count_ = 1;
   }
 
   return true;
@@ -499,7 +215,7 @@ void SmartLedzHub::trim_queued_target_commands_(uint16_t target, uint8_t opcode,
                        if (queued.target != target || queued.opcode != opcode) {
                          return false;
                        }
-                       if (opcode != OPCODE_COLOR || e2_subtype < 0) {
+                       if (opcode != smartledz_protocol::v1::kOpcodeColor || e2_subtype < 0) {
                          return true;
                        }
                        return queued.payload_len > 0 && queued.payload[0] == static_cast<uint8_t>(e2_subtype);
@@ -509,11 +225,11 @@ void SmartLedzHub::trim_queued_target_commands_(uint16_t target, uint8_t opcode,
 
 bool SmartLedzHub::enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len,
                                    uint32_t not_before_ms, bool verify_after_send) {
-  if (!this->session_ready_) {
+  if (!this->session_.is_session_ready()) {
     ESP_LOGW(TAG, "[%s] cannot queue packet before pairing", this->parent_->address_str());
     return false;
   }
-  if (this->control_handle_ == 0) {
+  if (this->session_.control_handle() == 0) {
     ESP_LOGW(TAG, "[%s] control handle not ready", this->parent_->address_str());
     return false;
   }
@@ -529,12 +245,12 @@ bool SmartLedzHub::enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_
     cmd.payload[i] = payload[i];
   }
 
-  if (opcode == OPCODE_BRIGHTNESS || opcode == OPCODE_COLOR) {
+  if (opcode == smartledz_protocol::v1::kOpcodeBrightness || opcode == smartledz_protocol::v1::kOpcodeColor) {
     for (auto it = this->tx_queue_.rbegin(); it != this->tx_queue_.rend(); ++it) {
       if (it->target != cmd.target || it->opcode != cmd.opcode) {
         continue;
       }
-      if (opcode == OPCODE_COLOR) {
+      if (opcode == smartledz_protocol::v1::kOpcodeColor) {
         if (it->payload_len == 0 || cmd.payload_len == 0 || it->payload[0] != cmd.payload[0]) {
           continue;
         }
@@ -564,7 +280,8 @@ void SmartLedzHub::apply_power_on_hold_(uint16_t target, uint32_t now) {
     if (queued.target != target) {
       continue;
     }
-    if (queued.opcode != OPCODE_BRIGHTNESS && queued.opcode != OPCODE_COLOR) {
+    if (queued.opcode != smartledz_protocol::v1::kOpcodeBrightness &&
+        queued.opcode != smartledz_protocol::v1::kOpcodeColor) {
       continue;
     }
     if (static_cast<int32_t>(target_hold_until - queued.not_before_ms) > 0) {
@@ -574,14 +291,14 @@ void SmartLedzHub::apply_power_on_hold_(uint16_t target, uint32_t now) {
 }
 
 void SmartLedzHub::schedule_verify_queries_(uint16_t target, uint32_t now) {
-  this->trim_queued_target_commands_(target, OPCODE_STATUS_QUERY, -1);
-  this->trim_queued_target_commands_(target, OPCODE_DIMMING_QUERY, -1);
+  this->trim_queued_target_commands_(target, smartledz_protocol::v1::kOpcodeStatusQuery, -1);
+  this->trim_queued_target_commands_(target, smartledz_protocol::v1::kOpcodeDimmingQuery, -1);
 
   const uint32_t verify_not_before = now + VERIFY_DELAY_MS;
-  const uint8_t status_payload[1] = {0x10};
-  const uint8_t dimming_payload[5] = {0x01, 0x01, 0x04, 0x11, 0x02};
-  this->enqueue_packet_(target, OPCODE_STATUS_QUERY, status_payload, sizeof(status_payload), verify_not_before, false);
-  this->enqueue_packet_(target, OPCODE_DIMMING_QUERY, dimming_payload, sizeof(dimming_payload), verify_not_before, false);
+  const auto status = smartledz_protocol::v1::make_status_query();
+  const auto dimming = smartledz_protocol::v1::make_dimming_query();
+  this->enqueue_packet_(target, status.opcode, status.payload.data(), status.payload_len, verify_not_before, false);
+  this->enqueue_packet_(target, dimming.opcode, dimming.payload.data(), dimming.payload_len, verify_not_before, false);
 }
 
 void SmartLedzHub::process_tx_queue_(uint32_t now) {
@@ -609,7 +326,7 @@ void SmartLedzHub::process_tx_queue_(uint32_t now) {
   this->tx_queue_.pop_front();
   this->last_tx_ms_ = now;
 
-  if (sent_opcode == OPCODE_ON_OFF) {
+  if (sent_opcode == smartledz_protocol::v1::kOpcodeOnOff) {
     if (sent_payload0 != 0x00) {
       this->apply_power_on_hold_(sent_target, now);
     } else {
@@ -627,14 +344,14 @@ bool SmartLedzHub::send_packet(uint16_t target, uint8_t opcode, const uint8_t *p
 }
 
 bool SmartLedzHub::send_on_off(uint16_t target, bool on) {
-  const uint8_t payload[1] = {static_cast<uint8_t>(on ? 0x01 : 0x00)};
-  this->trim_queued_target_commands_(target, OPCODE_BRIGHTNESS, -1);
-  this->trim_queued_target_commands_(target, OPCODE_COLOR, -1);
+  const auto cmd = smartledz_protocol::v1::make_on_off(on);
+  this->trim_queued_target_commands_(target, smartledz_protocol::v1::kOpcodeBrightness, -1);
+  this->trim_queued_target_commands_(target, smartledz_protocol::v1::kOpcodeColor, -1);
   if (!on) {
     this->target_hold_until_ms_.erase(target);
   }
 
-  auto ok = this->enqueue_packet_(target, OPCODE_ON_OFF, payload, sizeof(payload), millis(), true);
+  auto ok = this->enqueue_packet_(target, cmd.opcode, cmd.payload.data(), cmd.payload_len, millis(), true);
   if (ok) {
     auto &state = this->state_ref_(target);
     state.seen = true;
@@ -654,14 +371,14 @@ bool SmartLedzHub::send_on_off(uint16_t target, bool on) {
 }
 
 bool SmartLedzHub::send_brightness(uint16_t target, uint8_t brightness) {
-  const uint8_t payload[1] = {brightness};
+  const auto cmd = smartledz_protocol::v1::make_brightness(brightness);
   uint32_t not_before = millis();
   auto hold_it = this->target_hold_until_ms_.find(target);
   if (hold_it != this->target_hold_until_ms_.end() && static_cast<int32_t>(hold_it->second - not_before) > 0) {
     not_before = hold_it->second;
   }
 
-  auto ok = this->enqueue_packet_(target, OPCODE_BRIGHTNESS, payload, sizeof(payload), not_before, true);
+  auto ok = this->enqueue_packet_(target, cmd.opcode, cmd.payload.data(), cmd.payload_len, not_before, true);
   if (ok) {
     auto &state = this->state_ref_(target);
     state.seen = true;
@@ -673,14 +390,14 @@ bool SmartLedzHub::send_brightness(uint16_t target, uint8_t brightness) {
 }
 
 bool SmartLedzHub::send_rgb(uint16_t target, uint8_t red, uint8_t green, uint8_t blue) {
-  const uint8_t payload[4] = {0x04, red, green, blue};
+  const auto cmd = smartledz_protocol::v1::make_rgb(red, green, blue);
   uint32_t not_before = millis();
   auto hold_it = this->target_hold_until_ms_.find(target);
   if (hold_it != this->target_hold_until_ms_.end() && static_cast<int32_t>(hold_it->second - not_before) > 0) {
     not_before = hold_it->second;
   }
 
-  auto ok = this->enqueue_packet_(target, OPCODE_COLOR, payload, sizeof(payload), not_before, true);
+  auto ok = this->enqueue_packet_(target, cmd.opcode, cmd.payload.data(), cmd.payload_len, not_before, true);
   if (ok) {
     auto &state = this->state_ref_(target);
     state.seen = true;
@@ -692,43 +409,37 @@ bool SmartLedzHub::send_rgb(uint16_t target, uint8_t red, uint8_t green, uint8_t
 }
 
 bool SmartLedzHub::send_ct_raw(uint16_t target, uint8_t ct_raw) {
-  const uint8_t payload[2] = {0x05, static_cast<uint8_t>(std::max(18, std::min(65, static_cast<int>(ct_raw))))};
+  const auto cmd = smartledz_protocol::v1::make_ct_raw(ct_raw);
   uint32_t not_before = millis();
   auto hold_it = this->target_hold_until_ms_.find(target);
   if (hold_it != this->target_hold_until_ms_.end() && static_cast<int32_t>(hold_it->second - not_before) > 0) {
     not_before = hold_it->second;
   }
 
-  auto ok = this->enqueue_packet_(target, OPCODE_COLOR, payload, sizeof(payload), not_before, true);
+  auto ok = this->enqueue_packet_(target, cmd.opcode, cmd.payload.data(), cmd.payload_len, not_before, true);
   if (ok) {
     auto &state = this->state_ref_(target);
     state.seen = true;
     state.has_ct = true;
-    state.ct_raw = payload[1];
+    state.ct_raw = cmd.payload[1];
     state.last_update_ms = millis();
   }
   return ok;
 }
 
 bool SmartLedzHub::send_status_query(uint16_t target) {
-  const uint8_t payload[1] = {0x10};
-  return this->enqueue_packet_(target, OPCODE_STATUS_QUERY, payload, sizeof(payload), millis(), false);
+  const auto cmd = smartledz_protocol::v1::make_status_query();
+  return this->enqueue_packet_(target, cmd.opcode, cmd.payload.data(), cmd.payload_len, millis(), false);
 }
 
 bool SmartLedzHub::send_dimming_query(uint16_t target) {
-  const uint8_t payload[5] = {0x01, 0x01, 0x04, 0x11, 0x02};
-  return this->enqueue_packet_(target, OPCODE_DIMMING_QUERY, payload, sizeof(payload), millis(), false);
+  const auto cmd = smartledz_protocol::v1::make_dimming_query();
+  return this->enqueue_packet_(target, cmd.opcode, cmd.payload.data(), cmd.payload_len, millis(), false);
 }
 
 void SmartLedzHub::reset_runtime_state_() {
-  this->pairing_write_pending_ = false;
-  this->pairing_read_pending_ = false;
-  this->notify_register_pending_ = false;
-  this->notify_enable_pending_ = false;
-  this->session_ready_ = false;
-  this->notify_handle_ = 0;
-  this->control_handle_ = 0;
-  this->pair_handle_ = 0;
+  this->configure_session_();
+  this->session_.reset();
   this->device_states_.clear();
   this->last_poll_ms_ = 0;
   this->poll_cursor_ = 0;
@@ -738,7 +449,7 @@ void SmartLedzHub::reset_runtime_state_() {
 }
 
 void SmartLedzHub::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
-                                          esp_ble_gattc_cb_param_t *param) {
+                                       esp_ble_gattc_cb_param_t *param) {
   (void) gattc_if;
   switch (event) {
     case ESP_GATTC_DISCONNECT_EVT:
@@ -747,11 +458,18 @@ void SmartLedzHub::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t
       break;
 
     case ESP_GATTC_SEARCH_CMPL_EVT: {
+      if (!this->session_.set_link_context(this->parent_->get_gattc_if(), this->parent_->get_conn_id(),
+                                           this->parent_->get_remote_bda())) {
+        this->parent_->disconnect();
+        break;
+      }
       if (!this->discover_characteristics_()) {
         this->parent_->disconnect();
         break;
       }
-      this->begin_pairing_();
+      if (!this->session_.begin_pairing()) {
+        this->parent_->disconnect();
+      }
       break;
     }
 
@@ -759,26 +477,15 @@ void SmartLedzHub::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t
       if (param->write.conn_id != this->parent_->get_conn_id()) {
         break;
       }
-      if (param->write.status != ESP_GATT_OK) {
-        ESP_LOGW(TAG, "[%s] write failed handle=0x%04X status=%d", this->parent_->address_str(), param->write.handle,
-                 param->write.status);
-        if (param->write.handle == this->pair_handle_) {
-          this->parent_->disconnect();
-        }
+      bool need_disconnect = false;
+      bool session_established = false;
+      this->session_.handle_write_char_evt(param->write.handle, param->write.status, &need_disconnect,
+                                           &session_established);
+      if (need_disconnect) {
+        this->parent_->disconnect();
         break;
       }
-      if (this->pairing_write_pending_ && param->write.handle == this->pair_handle_) {
-        this->pairing_write_pending_ = false;
-        this->pairing_read_pending_ = true;
-        auto status = esp_ble_gattc_read_char(this->parent_->get_gattc_if(), this->parent_->get_conn_id(),
-                                              this->pair_handle_, ESP_GATT_AUTH_REQ_NONE);
-        if (status != ESP_GATT_OK) {
-          this->pairing_read_pending_ = false;
-          ESP_LOGW(TAG, "[%s] pair read failed status=%d", this->parent_->address_str(), status);
-          this->parent_->disconnect();
-        }
-      } else if (this->notify_enable_pending_ && param->write.handle == this->notify_handle_) {
-        this->notify_enable_pending_ = false;
+      if (session_established) {
         this->node_state = espbt::ClientState::ESTABLISHED;
         ESP_LOGI(TAG, "[%s] Smart LEDZ session established", this->parent_->address_str());
       }
@@ -786,14 +493,18 @@ void SmartLedzHub::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t
     }
 
     case ESP_GATTC_REG_FOR_NOTIFY_EVT: {
-      if (!this->notify_register_pending_ || param->reg_for_notify.handle != this->notify_handle_) {
+      bool need_disconnect = false;
+      bool session_established = false;
+      this->session_.handle_reg_for_notify_evt(param->reg_for_notify.handle, param->reg_for_notify.status,
+                                               &need_disconnect, &session_established);
+      if (need_disconnect) {
+        this->parent_->disconnect();
         break;
       }
-      this->notify_register_pending_ = false;
-      if (param->reg_for_notify.status != ESP_GATT_OK) {
-        ESP_LOGW(TAG, "[%s] REG_FOR_NOTIFY failed status=%d", this->parent_->address_str(), param->reg_for_notify.status);
+      if (session_established) {
+        this->node_state = espbt::ClientState::ESTABLISHED;
+        ESP_LOGI(TAG, "[%s] Smart LEDZ session established (notify write no-rsp)", this->parent_->address_str());
       }
-      this->write_notify_enable_();
       break;
     }
 
@@ -801,54 +512,47 @@ void SmartLedzHub::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t
       if (param->read.conn_id != this->parent_->get_conn_id()) {
         break;
       }
-      if (!this->pairing_read_pending_ || param->read.handle != this->pair_handle_) {
-        break;
-      }
-      this->pairing_read_pending_ = false;
-      if (param->read.status != ESP_GATT_OK) {
-        ESP_LOGW(TAG, "[%s] pair read status=%d", this->parent_->address_str(), param->read.status);
+      bool need_disconnect = false;
+      bool session_established = false;
+      this->session_.handle_read_char_evt(param->read.handle, param->read.status, param->read.value,
+                                          param->read.value_len, &need_disconnect, &session_established);
+      if (need_disconnect) {
         this->parent_->disconnect();
         break;
       }
-      this->handle_pairing_response_(param->read.value, param->read.value_len);
+      if (session_established) {
+        this->node_state = espbt::ClientState::ESTABLISHED;
+        ESP_LOGI(TAG, "[%s] Smart LEDZ session established", this->parent_->address_str());
+      }
       break;
     }
 
     case ESP_GATTC_NOTIFY_EVT: {
-      if (!this->session_ready_) {
-        break;
-      }
-      if (param->notify.conn_id != this->parent_->get_conn_id() || param->notify.handle != this->notify_handle_) {
-        break;
-      }
-      if (param->notify.value_len != 20) {
+      if (param->notify.conn_id != this->parent_->get_conn_id()) {
         break;
       }
 
-      uint8_t packet[20] = {0};
-      memcpy(packet, param->notify.value, sizeof(packet));
-      this->decrypt_packet_(packet);
+      esp_telink_mesh::v1::DecryptedNotify notify{};
+      if (!this->session_.handle_notify_packet(param->notify.handle, param->notify.value, param->notify.value_len,
+                                               &notify)) {
+        break;
+      }
 
-      const uint8_t opcode = packet[7];
-      const uint16_t src = packet[3] | (static_cast<uint16_t>(packet[4]) << 8);
-      const uint8_t *payload10 = &packet[10];
-      constexpr size_t payload_len = 10;
-
-      switch (opcode) {
-        case 0xDC:
-          this->update_device_from_online_status_(payload10, payload_len);
+      switch (notify.opcode) {
+        case smartledz_protocol::v1::kNotifyOpcodeOnlineStatus:
+          this->update_device_from_online_status_(notify.payload.data(), notify.payload.size());
           break;
-        case 0xDB:
-          this->update_device_from_status_(src, payload10, payload_len);
+        case smartledz_protocol::v1::kNotifyOpcodeStatus:
+          this->update_device_from_status_(notify.src, notify.payload.data(), notify.payload.size());
           break;
-        case 0xEA:
-          this->update_device_from_f1_response_(src, payload10, payload_len);
+        case smartledz_protocol::v1::kNotifyOpcodeExtended:
+          this->update_device_from_f1_response_(notify.src, notify.payload.data(), notify.payload.size());
           break;
         default:
           break;
       }
 
-      ESP_LOGV(TAG, "[%s] notify opcode=0x%02X src=0x%04X", this->parent_->address_str(), opcode, src);
+      ESP_LOGV(TAG, "[%s] notify opcode=0x%02X src=0x%04X", this->parent_->address_str(), notify.opcode, notify.src);
       break;
     }
 

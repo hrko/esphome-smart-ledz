@@ -2,7 +2,7 @@
 
 #ifdef USE_ESP32
 
-#include "../ct_rgb_lookup.h"
+#include "../smartledz_protocol_v1_color_math.h"
 #include "esphome/core/log.h"
 
 #include <algorithm>
@@ -104,7 +104,7 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
         kelvin = 2700.0f;
       }
       auto kelvin_int = static_cast<uint16_t>(std::max(1800, std::min(12000, static_cast<int>(roundf(kelvin)))));
-      const auto mapped = lookup_ct_rgb(kelvin_int, this->ct_duv_);
+      const auto mapped = smartledz_protocol::v1::lookup_ct_rgb(kelvin_int, this->ct_duv_);
       desired_r = mapped[0];
       desired_g = mapped[1];
       desired_b = mapped[2];
@@ -214,7 +214,8 @@ void SmartLedzLightOutput::sync_from_device_state_(const SmartLedzDeviceStateSna
       effective_mode = this->state_->remote_values.get_color_mode();
     }
     if (effective_mode == light::ColorMode::COLOR_TEMPERATURE) {
-      synca_kelvin = estimate_cct_from_rgb(device.rgb[0], device.rgb[1], device.rgb[2], this->ct_duv_);
+      synca_kelvin = smartledz_protocol::v1::estimate_cct_from_rgb(device.rgb[0], device.rgb[1], device.rgb[2],
+                                                                    this->ct_duv_);
       synca_ct_raw = kelvin_to_ct_raw_(synca_kelvin);
       synca_ct_changed = !this->has_last_ct_raw_ || this->last_ct_raw_ != synca_ct_raw;
     } else {

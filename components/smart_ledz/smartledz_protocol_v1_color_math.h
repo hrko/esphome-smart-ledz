@@ -1,20 +1,13 @@
 #pragma once
 
-#ifdef USE_ESP32
-
 #include <array>
 #include <cstdint>
 
-#include "smartledz_protocol_v1_color_math.h"
-
-namespace esphome {
-namespace smart_ledz {
+namespace smartledz_protocol {
+namespace v1 {
 
 std::array<uint8_t, 3> lookup_ct_rgb(uint16_t kelvin, float duv);
-
 uint16_t estimate_cct_from_rgb(uint8_t target_red, uint8_t target_green, uint8_t target_blue, float duv);
 
-}  // namespace smart_ledz
-}  // namespace esphome
-
-#endif
+}  // namespace v1
+}  // namespace smartledz_protocol

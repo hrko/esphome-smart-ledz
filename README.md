@@ -46,6 +46,14 @@ ESP32 を Smart LEDZ Mesh のブリッジとして動作させ、Home Assistant 
 - `target` を使った個別アドレス/グループアドレス宛ての操作
 - ポーリングと通知による状態反映（明るさ/色/電源状態）
 
+## 内部アーキテクチャ
+
+- Telink Mesh の ESP-IDF セッション層: `components/smart_ledz/esp_telink_mesh_v1_*`
+- Smart LEDZ プロトコル層（純粋 C++）: `components/smart_ledz/smartledz_protocol_v1_*`
+- ESPHome 統合層（Hub/Light）: `components/smart_ledz/`
+
+詳細は `ARCHITECTURE.md` を参照してください。
+
 ## このコンポーネントで扱わないこと
 
 - 新しい照明器具の追加
