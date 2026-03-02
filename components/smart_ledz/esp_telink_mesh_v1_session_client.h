@@ -69,6 +69,7 @@ class SessionClient {
   bool pairing_read_pending_{false};
   bool notify_register_pending_{false};
   bool notify_enable_pending_{false};
+  bool control_write_pending_{false};
   bool session_ready_{false};
 
   uint16_t packet_count_{1};

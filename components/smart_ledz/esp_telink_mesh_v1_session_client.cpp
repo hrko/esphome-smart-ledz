@@ -96,14 +96,23 @@ void SessionClient::configure(const std::string &mesh_name, const std::string &m
 }
 
 void SessionClient::reset() {
+  this->gattc_if_ = ESP_GATT_IF_NONE;
+  this->conn_id_ = 0;
+  memset(this->remote_bda_, 0, sizeof(this->remote_bda_));
+
   this->notify_handle_ = 0;
   this->control_handle_ = 0;
   this->pair_handle_ = 0;
+
+  this->mac_data_.fill(0);
+  this->pair_random_.fill(0);
+  this->session_key_.fill(0);
 
   this->pairing_write_pending_ = false;
   this->pairing_read_pending_ = false;
   this->notify_register_pending_ = false;
   this->notify_enable_pending_ = false;
+  this->control_write_pending_ = false;
   this->session_ready_ = false;
 
   this->packet_count_ = 1;
@@ -175,6 +184,16 @@ bool SessionClient::handle_write_char_evt(uint16_t handle, esp_gatt_status_t sta
                                           bool *session_established) {
   set_flag_(need_disconnect, false);
   set_flag_(session_established, false);
+
+  if (this->control_write_pending_ && handle == this->control_handle_) {
+    this->control_write_pending_ = false;
+    if (status != ESP_GATT_OK) {
+      ESP_LOGW(TAG, "control write failed handle=0x%04X status=%d", handle, status);
+    } else {
+      ESP_LOGV(TAG, "control write ack handle=0x%04X", handle);
+    }
+    return status == ESP_GATT_OK;
+  }
 
   if (status != ESP_GATT_OK) {
     ESP_LOGW(TAG, "write failed handle=0x%04X status=%d", handle, status);
@@ -397,6 +416,9 @@ bool SessionClient::send_mesh_command(uint16_t target, uint8_t opcode, const uin
   if (this->control_handle_ == 0 || this->gattc_if_ == ESP_GATT_IF_NONE) {
     return false;
   }
+  if (this->control_write_pending_) {
+    return false;
+  }
 
   uint8_t packet[20] = {0};
   packet[0] = this->packet_count_ & 0xFF;
@@ -416,11 +438,15 @@ bool SessionClient::send_mesh_command(uint16_t target, uint8_t opcode, const uin
 
   const auto status =
       esp_ble_gattc_write_char(this->gattc_if_, this->conn_id_, this->control_handle_, sizeof(packet), packet,
-                               ESP_GATT_WRITE_TYPE_NO_RSP, ESP_GATT_AUTH_REQ_NONE);
+                               ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
   if (status != ESP_GATT_OK) {
     ESP_LOGW(TAG, "send_packet write failed status=%d", status);
     return false;
   }
+
+  this->control_write_pending_ = true;
+  ESP_LOGV(TAG, "tx seq=0x%04X target=0x%04X opcode=0x%02X len=%u", this->packet_count_, target, opcode,
+           static_cast<unsigned>(data_len));
 
   this->packet_count_++;
   if (this->packet_count_ == 0) {
