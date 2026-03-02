@@ -193,12 +193,19 @@ bool SmartLedzHub::send_packet_now_(uint16_t target, uint8_t opcode, const uint8
     return false;
   }
 
-  if (!this->session_.send_mesh_command(target, opcode, payload, payload_len)) {
-    ESP_LOGW(TAG, "[%s] send_packet failed", this->parent_->address_str());
+  const auto result = this->session_.send_mesh_command(target, opcode, payload, payload_len);
+  if (result == esp_telink_mesh::v1::SendMeshCommandResult::SENT) {
+    return true;
+  }
+  if (result == esp_telink_mesh::v1::SendMeshCommandResult::BUSY_PENDING_ACK) {
     return false;
   }
-
-  return true;
+  if (result == esp_telink_mesh::v1::SendMeshCommandResult::NOT_READY) {
+    ESP_LOGW(TAG, "[%s] send_packet skipped: session not ready", this->parent_->address_str());
+    return false;
+  }
+  ESP_LOGW(TAG, "[%s] send_packet failed: write error", this->parent_->address_str());
+  return false;
 }
 
 void SmartLedzHub::trim_queued_target_commands_(uint16_t target, uint8_t opcode, int8_t e2_subtype) {

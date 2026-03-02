@@ -15,7 +15,7 @@ DEPENDENCIES = ["ble_client"]
 AUTO_LOAD = ["ble_client"]
 MULTI_CONF = True
 ESP_TELINK_MESH_REPOSITORY = (
-    "https://github.com/hrko/esp-telink-mesh.git#326d7762a0b859cd36e6f244e4012498777c452a"
+    "https://github.com/hrko/esp-telink-mesh.git#a2ab7d9282ef9a85d5640a5a5026c871cca7645a"
 )
 SMARTLEDZ_PROTOCOL_REPOSITORY = (
     "https://github.com/hrko/smartledz-protocol.git#2afbab0741dd151a295650fd52483e5f1c719bad"
