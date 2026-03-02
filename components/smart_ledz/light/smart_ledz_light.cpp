@@ -240,6 +240,22 @@ void SmartLedzLightOutput::sync_from_device_state_(const SmartLedzDeviceStateSna
   if (brightness_changed) {
     call.set_brightness(brightness);
   }
+  if (brightness_changed && !should_apply_color) {
+    auto mode = light::ColorMode::COLOR_TEMPERATURE;
+    if (device_type == SMART_LEDZ_DEVICE_TYPE_SYNCA) {
+      mode = light::ColorMode::UNKNOWN;
+      if (this->state_ != nullptr) {
+        mode = this->state_->remote_values.get_color_mode();
+      }
+      if (mode == light::ColorMode::UNKNOWN) {
+        mode = this->preferred_synca_mode_;
+      }
+      if (mode == light::ColorMode::UNKNOWN) {
+        mode = light::ColorMode::COLOR_TEMPERATURE;
+      }
+    }
+    call.set_color_mode_if_supported(mode);
+  }
 
   if (ct_changed && device_type == SMART_LEDZ_DEVICE_TYPE_TUNABLE && device.has_ct && device.ct_raw >= 18) {
     call.set_color_mode_if_supported(light::ColorMode::COLOR_TEMPERATURE);
