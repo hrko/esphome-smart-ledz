@@ -20,6 +20,12 @@ namespace smart_ledz {
 namespace {
 
 static const char *const TAG = "smart_ledz";
+constexpr uint8_t OPCODE_ON_OFF = 0xD0;
+constexpr uint8_t OPCODE_BRIGHTNESS = 0xD2;
+constexpr uint8_t OPCODE_COLOR = 0xE2;
+constexpr uint8_t OPCODE_STATUS_QUERY = 0xDA;
+constexpr uint8_t OPCODE_DIMMING_QUERY = 0xF0;
+constexpr uint32_t VERIFY_DELAY_MS = 200;
 
 const espbt::ESPBTUUID TELINK_SERVICE_UUID = espbt::ESPBTUUID::from_raw("00010203-0405-0607-0809-0a0b0c0d1910");
 const espbt::ESPBTUUID TELINK_NOTIFY_UUID = espbt::ESPBTUUID::from_raw("00010203-0405-0607-0809-0a0b0c0d1911");
@@ -90,6 +96,8 @@ void SmartLedzHub::dump_config() {
   ESP_LOGCONFIG(TAG, "  Vendor: 0x%04X", this->vendor_id_);
   ESP_LOGCONFIG(TAG, "  Session Ready: %s", YESNO(this->session_ready_));
   ESP_LOGCONFIG(TAG, "  Poll Interval: %ums", this->poll_interval_ms_);
+  ESP_LOGCONFIG(TAG, "  TX Interval: %ums", this->tx_interval_ms_);
+  ESP_LOGCONFIG(TAG, "  Power-on Settle: %ums", this->power_on_settle_ms_);
 }
 
 SmartLedzHub::DeviceState &SmartLedzHub::state_ref_(uint16_t address) {
@@ -121,10 +129,17 @@ void SmartLedzHub::register_polled_target(uint16_t target) {
 }
 
 void SmartLedzHub::loop() {
-  if (!this->session_ready_ || this->poll_interval_ms_ == 0 || this->polled_targets_.empty()) {
+  if (!this->session_ready_) {
     return;
   }
+
   const uint32_t now = millis();
+  this->process_tx_queue_(now);
+
+  if (this->poll_interval_ms_ == 0 || this->polled_targets_.empty()) {
+    return;
+  }
+
   if ((now - this->last_poll_ms_) < this->poll_interval_ms_) {
     return;
   }
@@ -435,7 +450,7 @@ void SmartLedzHub::decrypt_packet_(uint8_t *packet20) const {
   }
 }
 
-bool SmartLedzHub::send_packet(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len) {
+bool SmartLedzHub::send_packet_now_(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len) {
   if (!this->session_ready_) {
     ESP_LOGW(TAG, "[%s] cannot send packet before pairing", this->parent_->address_str());
     return false;
@@ -477,9 +492,149 @@ bool SmartLedzHub::send_packet(uint16_t target, uint8_t opcode, const uint8_t *p
   return true;
 }
 
+void SmartLedzHub::trim_queued_target_commands_(uint16_t target, uint8_t opcode, int8_t e2_subtype) {
+  this->tx_queue_.erase(
+      std::remove_if(this->tx_queue_.begin(), this->tx_queue_.end(),
+                     [target, opcode, e2_subtype](const TxCommand &queued) {
+                       if (queued.target != target || queued.opcode != opcode) {
+                         return false;
+                       }
+                       if (opcode != OPCODE_COLOR || e2_subtype < 0) {
+                         return true;
+                       }
+                       return queued.payload_len > 0 && queued.payload[0] == static_cast<uint8_t>(e2_subtype);
+                     }),
+      this->tx_queue_.end());
+}
+
+bool SmartLedzHub::enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len,
+                                   uint32_t not_before_ms, bool verify_after_send) {
+  if (!this->session_ready_) {
+    ESP_LOGW(TAG, "[%s] cannot queue packet before pairing", this->parent_->address_str());
+    return false;
+  }
+  if (this->control_handle_ == 0) {
+    ESP_LOGW(TAG, "[%s] control handle not ready", this->parent_->address_str());
+    return false;
+  }
+
+  TxCommand cmd{};
+  cmd.target = target;
+  cmd.opcode = opcode;
+  cmd.not_before_ms = not_before_ms;
+  cmd.verify_after_send = verify_after_send;
+  const auto data_len = std::min(payload_len, static_cast<size_t>(10));
+  cmd.payload_len = static_cast<uint8_t>(data_len);
+  for (size_t i = 0; i < data_len; i++) {
+    cmd.payload[i] = payload[i];
+  }
+
+  if (opcode == OPCODE_BRIGHTNESS || opcode == OPCODE_COLOR) {
+    for (auto it = this->tx_queue_.rbegin(); it != this->tx_queue_.rend(); ++it) {
+      if (it->target != cmd.target || it->opcode != cmd.opcode) {
+        continue;
+      }
+      if (opcode == OPCODE_COLOR) {
+        if (it->payload_len == 0 || cmd.payload_len == 0 || it->payload[0] != cmd.payload[0]) {
+          continue;
+        }
+      }
+      it->payload = cmd.payload;
+      it->payload_len = cmd.payload_len;
+      if (static_cast<int32_t>(cmd.not_before_ms - it->not_before_ms) > 0) {
+        it->not_before_ms = cmd.not_before_ms;
+      }
+      it->verify_after_send = it->verify_after_send || cmd.verify_after_send;
+      return true;
+    }
+  }
+
+  this->tx_queue_.push_back(cmd);
+  return true;
+}
+
+void SmartLedzHub::apply_power_on_hold_(uint16_t target, uint32_t now) {
+  const uint32_t hold_until = now + this->power_on_settle_ms_;
+  auto &target_hold_until = this->target_hold_until_ms_[target];
+  if (static_cast<int32_t>(hold_until - target_hold_until) > 0) {
+    target_hold_until = hold_until;
+  }
+
+  for (auto &queued : this->tx_queue_) {
+    if (queued.target != target) {
+      continue;
+    }
+    if (queued.opcode != OPCODE_BRIGHTNESS && queued.opcode != OPCODE_COLOR) {
+      continue;
+    }
+    if (static_cast<int32_t>(target_hold_until - queued.not_before_ms) > 0) {
+      queued.not_before_ms = target_hold_until;
+    }
+  }
+}
+
+void SmartLedzHub::schedule_verify_queries_(uint16_t target, uint32_t now) {
+  this->trim_queued_target_commands_(target, OPCODE_STATUS_QUERY, -1);
+  this->trim_queued_target_commands_(target, OPCODE_DIMMING_QUERY, -1);
+
+  const uint32_t verify_not_before = now + VERIFY_DELAY_MS;
+  const uint8_t status_payload[1] = {0x10};
+  const uint8_t dimming_payload[5] = {0x01, 0x01, 0x04, 0x11, 0x02};
+  this->enqueue_packet_(target, OPCODE_STATUS_QUERY, status_payload, sizeof(status_payload), verify_not_before, false);
+  this->enqueue_packet_(target, OPCODE_DIMMING_QUERY, dimming_payload, sizeof(dimming_payload), verify_not_before, false);
+}
+
+void SmartLedzHub::process_tx_queue_(uint32_t now) {
+  if (this->tx_queue_.empty()) {
+    return;
+  }
+  if ((now - this->last_tx_ms_) < this->tx_interval_ms_) {
+    return;
+  }
+
+  const auto &next = this->tx_queue_.front();
+  if (static_cast<int32_t>(now - next.not_before_ms) < 0) {
+    return;
+  }
+  if (!this->send_packet_now_(next.target, next.opcode, next.payload.data(), next.payload_len)) {
+    // Avoid hot-looping when the stack temporarily rejects a write.
+    this->last_tx_ms_ = now;
+    return;
+  }
+
+  const uint16_t sent_target = next.target;
+  const uint8_t sent_opcode = next.opcode;
+  const uint8_t sent_payload0 = next.payload_len > 0 ? next.payload[0] : 0;
+  const bool should_verify = next.verify_after_send;
+  this->tx_queue_.pop_front();
+  this->last_tx_ms_ = now;
+
+  if (sent_opcode == OPCODE_ON_OFF) {
+    if (sent_payload0 != 0x00) {
+      this->apply_power_on_hold_(sent_target, now);
+    } else {
+      this->target_hold_until_ms_.erase(sent_target);
+    }
+  }
+
+  if (should_verify) {
+    this->schedule_verify_queries_(sent_target, now);
+  }
+}
+
+bool SmartLedzHub::send_packet(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len) {
+  return this->enqueue_packet_(target, opcode, payload, payload_len, millis(), false);
+}
+
 bool SmartLedzHub::send_on_off(uint16_t target, bool on) {
   const uint8_t payload[1] = {static_cast<uint8_t>(on ? 0x01 : 0x00)};
-  auto ok = this->send_packet(target, 0xD0, payload, sizeof(payload));
+  this->trim_queued_target_commands_(target, OPCODE_BRIGHTNESS, -1);
+  this->trim_queued_target_commands_(target, OPCODE_COLOR, -1);
+  if (!on) {
+    this->target_hold_until_ms_.erase(target);
+  }
+
+  auto ok = this->enqueue_packet_(target, OPCODE_ON_OFF, payload, sizeof(payload), millis(), true);
   if (ok) {
     auto &state = this->state_ref_(target);
     state.seen = true;
@@ -500,7 +655,13 @@ bool SmartLedzHub::send_on_off(uint16_t target, bool on) {
 
 bool SmartLedzHub::send_brightness(uint16_t target, uint8_t brightness) {
   const uint8_t payload[1] = {brightness};
-  auto ok = this->send_packet(target, 0xD2, payload, sizeof(payload));
+  uint32_t not_before = millis();
+  auto hold_it = this->target_hold_until_ms_.find(target);
+  if (hold_it != this->target_hold_until_ms_.end() && static_cast<int32_t>(hold_it->second - not_before) > 0) {
+    not_before = hold_it->second;
+  }
+
+  auto ok = this->enqueue_packet_(target, OPCODE_BRIGHTNESS, payload, sizeof(payload), not_before, true);
   if (ok) {
     auto &state = this->state_ref_(target);
     state.seen = true;
@@ -513,7 +674,13 @@ bool SmartLedzHub::send_brightness(uint16_t target, uint8_t brightness) {
 
 bool SmartLedzHub::send_rgb(uint16_t target, uint8_t red, uint8_t green, uint8_t blue) {
   const uint8_t payload[4] = {0x04, red, green, blue};
-  auto ok = this->send_packet(target, 0xE2, payload, sizeof(payload));
+  uint32_t not_before = millis();
+  auto hold_it = this->target_hold_until_ms_.find(target);
+  if (hold_it != this->target_hold_until_ms_.end() && static_cast<int32_t>(hold_it->second - not_before) > 0) {
+    not_before = hold_it->second;
+  }
+
+  auto ok = this->enqueue_packet_(target, OPCODE_COLOR, payload, sizeof(payload), not_before, true);
   if (ok) {
     auto &state = this->state_ref_(target);
     state.seen = true;
@@ -526,7 +693,13 @@ bool SmartLedzHub::send_rgb(uint16_t target, uint8_t red, uint8_t green, uint8_t
 
 bool SmartLedzHub::send_ct_raw(uint16_t target, uint8_t ct_raw) {
   const uint8_t payload[2] = {0x05, static_cast<uint8_t>(std::max(18, std::min(65, static_cast<int>(ct_raw))))};
-  auto ok = this->send_packet(target, 0xE2, payload, sizeof(payload));
+  uint32_t not_before = millis();
+  auto hold_it = this->target_hold_until_ms_.find(target);
+  if (hold_it != this->target_hold_until_ms_.end() && static_cast<int32_t>(hold_it->second - not_before) > 0) {
+    not_before = hold_it->second;
+  }
+
+  auto ok = this->enqueue_packet_(target, OPCODE_COLOR, payload, sizeof(payload), not_before, true);
   if (ok) {
     auto &state = this->state_ref_(target);
     state.seen = true;
@@ -539,12 +712,12 @@ bool SmartLedzHub::send_ct_raw(uint16_t target, uint8_t ct_raw) {
 
 bool SmartLedzHub::send_status_query(uint16_t target) {
   const uint8_t payload[1] = {0x10};
-  return this->send_packet(target, 0xDA, payload, sizeof(payload));
+  return this->enqueue_packet_(target, OPCODE_STATUS_QUERY, payload, sizeof(payload), millis(), false);
 }
 
 bool SmartLedzHub::send_dimming_query(uint16_t target) {
   const uint8_t payload[5] = {0x01, 0x01, 0x04, 0x11, 0x02};
-  return this->send_packet(target, 0xF0, payload, sizeof(payload));
+  return this->enqueue_packet_(target, OPCODE_DIMMING_QUERY, payload, sizeof(payload), millis(), false);
 }
 
 void SmartLedzHub::reset_runtime_state_() {
@@ -559,6 +732,9 @@ void SmartLedzHub::reset_runtime_state_() {
   this->device_states_.clear();
   this->last_poll_ms_ = 0;
   this->poll_cursor_ = 0;
+  this->tx_queue_.clear();
+  this->target_hold_until_ms_.clear();
+  this->last_tx_ms_ = 0;
 }
 
 void SmartLedzHub::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,

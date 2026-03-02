@@ -54,7 +54,6 @@ class SmartLedzLightOutput : public light::LightOutput,
   std::array<uint8_t, 3> last_rgb_{0, 0, 0};
   light::ColorMode preferred_synca_mode_{light::ColorMode::UNKNOWN};
   bool ignore_transition_{true};
-  uint32_t last_tx_ms_{0};
 };
 
 }  // namespace smart_ledz

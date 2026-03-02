@@ -9,6 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <map>
 #include <set>
 #include <string>
@@ -72,6 +73,8 @@ class SmartLedzHub : public ble_client::BLEClientNode, public Component {
   void register_state_listener(SmartLedzStateListener *listener);
   void register_polled_target(uint16_t target);
   void set_poll_interval_ms(uint32_t poll_interval_ms) { this->poll_interval_ms_ = poll_interval_ms; }
+  void set_tx_interval_ms(uint32_t tx_interval_ms) { this->tx_interval_ms_ = tx_interval_ms == 0 ? 1 : tx_interval_ms; }
+  void set_power_on_settle_ms(uint32_t power_on_settle_ms) { this->power_on_settle_ms_ = power_on_settle_ms; }
 
   void setup() override { this->reset_runtime_state_(); }
   void loop() override;
@@ -82,12 +85,28 @@ class SmartLedzHub : public ble_client::BLEClientNode, public Component {
                            esp_ble_gattc_cb_param_t *param) override;
 
  protected:
+  struct TxCommand {
+    uint16_t target{0};
+    uint8_t opcode{0};
+    std::array<uint8_t, 10> payload{};
+    uint8_t payload_len{0};
+    uint32_t not_before_ms{0};
+    bool verify_after_send{false};
+  };
+
   bool discover_characteristics_();
   bool register_notify_();
   bool write_notify_enable_();
   void begin_pairing_();
   void handle_pairing_response_(const uint8_t *data, uint16_t len);
   void reset_runtime_state_();
+  bool send_packet_now_(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len);
+  bool enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len,
+                       uint32_t not_before_ms, bool verify_after_send);
+  void process_tx_queue_(uint32_t now);
+  void apply_power_on_hold_(uint16_t target, uint32_t now);
+  void trim_queued_target_commands_(uint16_t target, uint8_t opcode, int8_t e2_subtype);
+  void schedule_verify_queries_(uint16_t target, uint32_t now);
   void update_mac_data_();
   void encrypt_packet_(uint8_t *packet20) const;
   void decrypt_packet_(uint8_t *packet20) const;
@@ -122,6 +141,11 @@ class SmartLedzHub : public ble_client::BLEClientNode, public Component {
   uint32_t poll_interval_ms_{2000};
   uint32_t last_poll_ms_{0};
   uint16_t poll_cursor_{0};
+  std::deque<TxCommand> tx_queue_;
+  std::map<uint16_t, uint32_t> target_hold_until_ms_;
+  uint32_t tx_interval_ms_{120};
+  uint32_t power_on_settle_ms_{400};
+  uint32_t last_tx_ms_{0};
 };
 
 }  // namespace smart_ledz

@@ -4,7 +4,6 @@
 
 #include "../ct_rgb_lookup.h"
 #include "esphome/core/log.h"
-#include "esphome/core/hal.h"
 
 #include <algorithm>
 #include <cmath>
@@ -129,14 +128,6 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
   if (!has_any_command) {
     return;
   }
-
-  // ESPHome transitions can call write_state very frequently; limit BLE write burst.
-  const uint32_t now = millis();
-  constexpr uint32_t kMinTxIntervalMs = 80;
-  if (!should_send_on_off && (now - this->last_tx_ms_) < kMinTxIntervalMs) {
-    return;
-  }
-  this->last_tx_ms_ = now;
 
   if (should_send_on_off && !this->parent_->send_on_off(this->target_, is_on)) {
     ESP_LOGW(TAG, "on/off send failed target=0x%04X", this->target_);
