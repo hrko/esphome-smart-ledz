@@ -1,5 +1,11 @@
 # esphome-smart-ledz
 
+## Tools
+
+- SmartLEDZ export YAML builder SPA:
+  - `tools/smartledz-export-spa/index.html`
+  - requirements: `SMARTLEDZ_EXPORT_SPA_REQUIREMENTS.md`
+
 ## State Sync Notes
 
 - For `synca` lights in color temperature mode, RGB notify updates are converted back to

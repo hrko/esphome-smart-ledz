@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartLEDZ Export YAML Builder</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient"></div>
+    <header class="hero">
+      <p class="eyebrow">SmartLEDZ Fit Toolkit</p>
+      <h1>Export JSON to ESPHome YAML</h1>
+      <p>
+        Load SmartLEDZ Fit raw export JSON, pick devices/groups, tune hub/light settings, and copy YAML.
+      </p>
+    </header>
+
+    <main class="layout">
+      <section class="card" id="input-card">
+        <h2>1. Load Export File</h2>
+        <label class="file-picker" for="export-file">
+          <span>Choose SmartLEDZ raw export JSON</span>
+          <input id="export-file" type="file" accept=".json,application/json" />
+        </label>
+        <p id="input-status" class="muted">No file loaded yet.</p>
+        <div id="mesh-summary" class="summary-grid"></div>
+      </section>
+
+      <section class="card">
+        <h2>2. BLE Client And Hub</h2>
+        <div class="split-grid">
+          <div class="pane">
+            <h3>BLE Client</h3>
+            <label class="field">
+              <span>ble_client.id</span>
+              <input id="ble-id" type="text" value="ledz_node" />
+            </label>
+            <label class="field">
+              <span>Device For MAC</span>
+              <select id="ble-device-select"></select>
+            </label>
+            <label class="field">
+              <span>mac_address</span>
+              <input id="ble-mac-address" type="text" placeholder="AA:BB:CC:DD:EE:FF" />
+            </label>
+            <label class="check-field" for="ble-auto-connect">
+              <input id="ble-auto-connect" type="checkbox" checked />
+              <span>auto_connect</span>
+            </label>
+          </div>
+
+          <div class="pane">
+            <h3>smart_ledz Hub</h3>
+            <label class="field">
+              <span>smart_ledz.id</span>
+              <input id="hub-id" type="text" value="ledz_hub" />
+            </label>
+            <label class="field">
+              <span>vendor_id</span>
+              <input id="hub-vendor-id" type="text" value="0x0211" />
+            </label>
+            <label class="field">
+              <span>poll_interval</span>
+              <input id="hub-poll-interval" type="text" value="2s" />
+            </label>
+            <label class="field">
+              <span>tx_interval</span>
+              <input id="hub-tx-interval" type="text" value="120ms" />
+            </label>
+            <label class="field">
+              <span>power_on_settle</span>
+              <input id="hub-power-on-settle" type="text" value="400ms" />
+            </label>
+            <label class="field">
+              <span>Secret Key: mesh_name</span>
+              <input id="secret-mesh-name-key" type="text" value="smart_ledz_mesh_name" />
+            </label>
+            <label class="field">
+              <span>Secret Key: mesh_password</span>
+              <input id="secret-mesh-password-key" type="text" value="smart_ledz_mesh_password" />
+            </label>
+            <label class="field">
+              <span>Hub Extra YAML Lines</span>
+              <textarea
+                id="hub-extra-yaml"
+                rows="4"
+                placeholder="example:\nretry_timeout: 3s"
+              ></textarea>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>3. Pick Conversion Targets</h2>
+        <div class="split-grid">
+          <div class="pane">
+            <div class="pane-head">
+              <h3>Devices <small id="device-count">0</small></h3>
+              <div class="mini-actions">
+                <button type="button" id="select-all-devices">All</button>
+                <button type="button" id="clear-devices">None</button>
+              </div>
+            </div>
+            <ul id="device-list" class="target-list"></ul>
+          </div>
+          <div class="pane">
+            <div class="pane-head">
+              <h3>Groups <small id="group-count">0</small></h3>
+              <div class="mini-actions">
+                <button type="button" id="select-all-groups">All</button>
+                <button type="button" id="clear-groups">None</button>
+              </div>
+            </div>
+            <ul id="group-list" class="target-list"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>4. Light Settings (Selected Only)</h2>
+        <div id="light-editor-list" class="light-grid"></div>
+      </section>
+
+      <section class="card" id="output-card">
+        <h2>5. Generated Output</h2>
+        <div id="validation-messages"></div>
+        <div class="output-grid">
+          <article class="output-panel">
+            <div class="output-head">
+              <h3>ESPHome YAML</h3>
+              <button id="copy-yaml" type="button">Copy</button>
+            </div>
+            <pre><code id="yaml-output"># Load export JSON to generate YAML.</code></pre>
+          </article>
+
+          <article class="output-panel">
+            <div class="output-head">
+              <h3>secrets.yaml</h3>
+              <button id="copy-secrets" type="button">Copy</button>
+            </div>
+            <pre><code id="secrets-output"># Secrets output appears here.</code></pre>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
