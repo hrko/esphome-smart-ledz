@@ -76,7 +76,25 @@ Smart LEDZ は Telink Mesh 上に構築された Bluetooth メッシュシステ
 
 - 必須: `id`, `name`, `smart_ledz_id`, `target`, `device_type`
 - 任意: `ct_duv`（デフォルト `0`、`-6.0〜6.0`）
+- 任意: `duv_number`（synca 専用、デフォルトで自動生成）
 - 任意: `ignore_transition`（デフォルト `true`）
+
+### `duv_number`（synca 専用）
+
+`duv_number` は DUV をランタイムで変更できる `number` エンティティです。
+
+- `device_type: synca` のときのみ利用可能
+- synca ライトでは未指定でも自動生成
+- 値域は `-6.0〜6.0` 固定
+- 任意: `step`（デフォルト `0.1`）
+- 任意: `restore_value`（デフォルト `false`）
+- 任意: `initial_value`（デフォルト `ct_duv`）
+- 任意: `name`, `id`（未指定時は自動生成）
+
+挙動:
+
+- synca ライトが ON かつ色温度モード中に DUV を変更すると、即時反映されます。
+- ライトが OFF の場合は DUV 値のみ更新し、次回のライト操作時に反映されます。
 
 ### `target` の指定
 

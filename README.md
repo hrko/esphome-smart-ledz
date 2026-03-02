@@ -78,7 +78,25 @@ The converter tool is a static page. Loaded JSON is processed only in your brows
 
 - Required: `id`, `name`, `smart_ledz_id`, `target`, `device_type`
 - Optional: `ct_duv` (default: `0`, range: `-6.0` to `6.0`)
+- Optional: `duv_number` (synca only, auto-created by default)
 - Optional: `ignore_transition` (default: `true`)
+
+### `duv_number` (synca only)
+
+`duv_number` exposes DUV as a runtime-adjustable `number` entity.
+
+- Available only when `device_type: synca`
+- Automatically created for synca lights even when omitted
+- Range is fixed to `-6.0` to `6.0`
+- Optional: `step` (default: `0.1`)
+- Optional: `restore_value` (default: `false`)
+- Optional: `initial_value` (default: `ct_duv`)
+- Optional: `name`, `id` (auto-generated when omitted)
+
+Behavior:
+
+- Changing DUV while the synca light is ON in color-temperature mode applies immediately.
+- If the light is OFF, only the DUV value is updated; the new value is used on the next light operation.
 
 ### `target`
 

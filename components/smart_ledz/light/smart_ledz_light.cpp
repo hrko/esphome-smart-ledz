@@ -55,6 +55,20 @@ void SmartLedzLightOutput::setup_state(light::LightState *state) {
   }
 }
 
+void SmartLedzLightOutput::apply_ct_duv_update_from_number() {
+  if (this->device_type_ != SMART_LEDZ_DEVICE_TYPE_SYNCA || this->state_ == nullptr || this->parent_ == nullptr ||
+      !this->parent_->is_session_ready()) {
+    return;
+  }
+
+  const auto &values = this->ignore_transition_ ? this->state_->remote_values : this->state_->current_values;
+  if (!values.is_on() || values.get_color_mode() != light::ColorMode::COLOR_TEMPERATURE) {
+    return;
+  }
+
+  this->write_state(this->state_);
+}
+
 void SmartLedzLightOutput::write_state(light::LightState *state) {
   if (this->suppress_write_) {
     this->suppress_write_ = false;

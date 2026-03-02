@@ -18,6 +18,7 @@ class SmartLedzLightOutput : public light::LightOutput,
   void set_device_type(SmartLedzDeviceType device_type) { this->device_type_ = device_type; }
   void set_ignore_transition(bool ignore_transition) { this->ignore_transition_ = ignore_transition; }
   void set_ct_duv(float ct_duv) { this->ct_duv_ = std::max(-6.0f, std::min(6.0f, ct_duv)); }
+  void apply_ct_duv_update_from_number();
 
   light::LightTraits get_traits() override;
   void setup_state(light::LightState *state) override;
