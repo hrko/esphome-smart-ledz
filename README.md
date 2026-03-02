@@ -3,11 +3,42 @@
 Smart LEDZ デバイスを ESPHome から操作するための外部コンポーネントです。  
 ESP32 を Smart LEDZ Mesh のブリッジとして動作させ、Home Assistant から通常の `light` エンティティとして扱えます。
 
+Smart LEDZ は Telink Mesh 上に構築された Bluetooth メッシュシステムです。
+
+## このコンポーネントでできること
+
+- SmartLEDZ Fit に登録済みの照明器具/グループを `light` エンティティとして ESPHome から制御
+- `device_type` に応じた ON/OFF、明るさ、色温度、RGB 制御
+- `target` を使った個別アドレス/グループアドレス宛ての操作
+- ポーリングと通知による状態反映（明るさ/色/電源状態）
+
+## このコンポーネントで扱わないこと
+
+- 新しい照明器具の追加
+- グループの作成
+- グループへの照明器具の追加・削除
+- SmartLEDZ Fit 側の構成管理（上記のような管理操作全般）
+
+照明器具やグループ構成を変更した場合は、SmartLEDZ Fit 側で更新したあとに JSON を再エクスポートし、ESPHome YAML も更新してください。
+
 ## 対応環境
 
 - ESPHome + ESP32
 - `esp-idf` フレームワーク（推奨）
 - Smart LEDZ の `mesh_name` / `mesh_password`
+
+## 対応機器と検証状況
+
+`device_type` は次の対応関係です。
+
+- `dimmable`: 無線調光照明
+- `tunable`: Tunable LEDZ シリーズ
+- `synca`: Synca シリーズ
+
+検証状況:
+
+- 実機での動作確認は、Synca シリーズのスポットライト `SXS3025WB` のみで実施しています。
+- 実装は複数台メッシュでの利用を想定していますが、手元の対応機器が 1 台のみのため、単一デバイスのメッシュ構成でのみ確認済みです。
 
 ## 前提条件
 
@@ -39,29 +70,12 @@ ESP32 を Smart LEDZ Mesh のブリッジとして動作させ、Home Assistant 
 機密性を重視する場合は、`tools/smartledz-export-spa/` の `index.html` / `app.js` / `styles.css` をローカルで開いて利用できます。  
 この方法ならネットワークを切った状態（機内モード相当）でも実行できます。
 
-## このコンポーネントでできること
+## 設定値の取得と YAML 生成
 
-- SmartLEDZ Fit に登録済みの照明器具/グループを `light` エンティティとして ESPHome から制御
-- `device_type` に応じた ON/OFF、明るさ、色温度、RGB 制御
-- `target` を使った個別アドレス/グループアドレス宛ての操作
-- ポーリングと通知による状態反映（明るさ/色/電源状態）
+生成ツールは次の 2 つの使い方に対応しています。
 
-## 内部アーキテクチャ
-
-- Telink Mesh の ESP-IDF セッション層: `https://github.com/hrko/esp-telink-mesh`
-- Smart LEDZ プロトコル層（純粋 C++）: `https://github.com/hrko/smartledz-protocol`
-- ESPHome 統合層（Hub/Light）: `components/smart_ledz/`
-
-詳細は `ARCHITECTURE.md` を参照してください。
-
-## このコンポーネントで扱わないこと
-
-- 新しい照明器具の追加
-- グループの作成
-- グループへの照明器具の追加・削除
-- SmartLEDZ Fit 側の構成管理（上記のような管理操作全般）
-
-照明器具やグループ構成を変更した場合は、SmartLEDZ Fit 側で更新したあとに JSON を再エクスポートし、ESPHome YAML も更新してください。
+- GitHub Pages: `https://<GitHubユーザー名>.github.io/esphome-smart-ledz/`
+- ローカル実行: `tools/smartledz-export-spa/index.html`
 
 ## 設定リファレンス
 
@@ -79,27 +93,17 @@ ESP32 を Smart LEDZ Mesh のブリッジとして動作させ、Home Assistant 
 - 任意: `ct_duv`（デフォルト `0`、`-6.0〜6.0`）
 - 任意: `ignore_transition`（デフォルト `true`）
 
-`device_type` は次のいずれかを指定します。
-
-- `dimmable`: 調光のみ
-- `tunable`: 色温度
-- `synca`: RGB + 色温度
-
-## `target` の指定
+### `target` の指定
 
 - 個別デバイス: 例 `0x0001`
 - グループ: 例 `0x8001`
 
 SmartLEDZ Fit のエクスポートデータを使う場合、グループの `target` は通常 `0x8000 | グループ下位バイト` です。
 
-## 設定値の取得と YAML 生成
+## 運用上の注意
 
-生成ツールは次の 2 つの使い方に対応しています。
-
-- GitHub Pages: `https://<GitHubユーザー名>.github.io/esphome-smart-ledz/`
-- ローカル実行: `tools/smartledz-export-spa/index.html`
-
-`mesh_name` / `mesh_password` は `!secret` 化して運用することを推奨します。
+- Bluetooth LE スタックは CPU/メモリ使用量が大きいため、本コンポーネントを動かす ESP32 ボードは本コンポーネント専用で使用することを推奨します。
+- `mesh_name` / `mesh_password` は `!secret` 化して運用することを推奨します。
 
 ## 動作確認
 
@@ -108,6 +112,14 @@ SmartLEDZ Fit のエクスポートデータを使う場合、グループの `t
 ```bash
 uvx esphome compile example_smart_ledz.yaml
 ```
+
+## 内部アーキテクチャ
+
+- Telink Mesh の ESP-IDF セッション層: `https://github.com/hrko/esp-telink-mesh`
+- Smart LEDZ プロトコル層（純粋 C++）: `https://github.com/hrko/smartledz-protocol`
+- ESPHome 統合層（Hub/Light）: `components/smart_ledz/`
+
+詳細は `ARCHITECTURE.md` を参照してください。
 
 ## トラブルシューティング
 
