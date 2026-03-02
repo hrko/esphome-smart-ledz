@@ -105,6 +105,16 @@ The page must render output in code blocks and provide copy buttons for:
 1. generated ESPHome YAML
 2. generated `secrets.yaml`
 
+## Beginner-Friendly UX
+
+Options with low configuration frequency must be hidden under collapsed advanced sections by default.
+
+- BLE advanced: `ble_client.id`, `auto_connect`
+- Hub advanced: vendor/timing/secret-key-name/extra-yaml options
+- Light advanced: `id`, `target`, `device_type`, `ct_duv`, `ignore_transition`, extra-yaml
+
+Primary flow keeps commonly edited fields visible (for example, file load, target selection, light `name`).
+
 ## Validation
 
 The SPA must validate and report errors for at least:

@@ -16,6 +16,8 @@ Static SPA to convert SmartLEDZ Fit raw export JSON into ESPHome YAML for the `s
 4. Adjust BLE, hub, and per-light settings.
 5. Copy generated `ESPHome YAML` and `secrets.yaml`.
 
+By default, low-frequency options are hidden in `Advanced ... Settings` sections.
+
 ## Output Scope
 
 Generated YAML includes exactly these top-level sections:
@@ -29,5 +31,6 @@ Generated YAML includes exactly these top-level sections:
 
 - Input format is raw SmartLEDZ Fit export JSON.
 - `mesh_name` and `mesh_password` are emitted as `!secret` references.
+- BLE Client device can generally be any available mesh device.
 - Group target default is `0x8000 | group_low_byte`.
 - Extra YAML lines are inserted as-is; verify syntax before use.

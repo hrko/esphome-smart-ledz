@@ -203,6 +203,39 @@ button:disabled {
   font-weight: 700;
 }
 
+.advanced-block {
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.advanced-block > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ink-soft);
+  list-style: none;
+}
+
+.advanced-block > summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-block > summary::before {
+  content: "▶";
+  display: inline-block;
+  margin-right: 8px;
+  transition: transform 0.15s ease;
+}
+
+.advanced-block[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.advanced-block > :not(summary) {
+  margin-top: 10px;
+}
+
 input[type="text"],
 input[type="file"],
 select,
@@ -297,6 +330,10 @@ textarea {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.light-grid-basic-fields {
+  grid-template-columns: 1fr;
 }
 
 .placeholder {

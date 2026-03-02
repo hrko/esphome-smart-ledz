@@ -33,10 +33,6 @@
           <div class="pane">
             <h3>BLE Client</h3>
             <label class="field">
-              <span>ble_client.id</span>
-              <input id="ble-id" type="text" value="ledz_node" />
-            </label>
-            <label class="field">
               <span>Device For MAC</span>
               <select id="ble-device-select"></select>
             </label>
@@ -44,10 +40,17 @@
               <span>mac_address</span>
               <input id="ble-mac-address" type="text" placeholder="AA:BB:CC:DD:EE:FF" />
             </label>
-            <label class="check-field" for="ble-auto-connect">
-              <input id="ble-auto-connect" type="checkbox" checked />
-              <span>auto_connect</span>
-            </label>
+            <details class="advanced-block">
+              <summary>Advanced BLE Settings</summary>
+              <label class="field">
+                <span>ble_client.id</span>
+                <input id="ble-id" type="text" value="ledz_node" />
+              </label>
+              <label class="check-field" for="ble-auto-connect">
+                <input id="ble-auto-connect" type="checkbox" checked />
+                <span>auto_connect</span>
+              </label>
+            </details>
           </div>
 
           <div class="pane">
@@ -56,38 +59,41 @@
               <span>smart_ledz.id</span>
               <input id="hub-id" type="text" value="ledz_hub" />
             </label>
-            <label class="field">
-              <span>vendor_id</span>
-              <input id="hub-vendor-id" type="text" value="0x0211" />
-            </label>
-            <label class="field">
-              <span>poll_interval</span>
-              <input id="hub-poll-interval" type="text" value="2s" />
-            </label>
-            <label class="field">
-              <span>tx_interval</span>
-              <input id="hub-tx-interval" type="text" value="120ms" />
-            </label>
-            <label class="field">
-              <span>power_on_settle</span>
-              <input id="hub-power-on-settle" type="text" value="400ms" />
-            </label>
-            <label class="field">
-              <span>Secret Key: mesh_name</span>
-              <input id="secret-mesh-name-key" type="text" value="smart_ledz_mesh_name" />
-            </label>
-            <label class="field">
-              <span>Secret Key: mesh_password</span>
-              <input id="secret-mesh-password-key" type="text" value="smart_ledz_mesh_password" />
-            </label>
-            <label class="field">
-              <span>Hub Extra YAML Lines</span>
-              <textarea
-                id="hub-extra-yaml"
-                rows="4"
-                placeholder="example:\nretry_timeout: 3s"
-              ></textarea>
-            </label>
+            <details class="advanced-block">
+              <summary>Advanced Hub Settings</summary>
+              <label class="field">
+                <span>vendor_id</span>
+                <input id="hub-vendor-id" type="text" value="0x0211" />
+              </label>
+              <label class="field">
+                <span>poll_interval</span>
+                <input id="hub-poll-interval" type="text" value="2s" />
+              </label>
+              <label class="field">
+                <span>tx_interval</span>
+                <input id="hub-tx-interval" type="text" value="120ms" />
+              </label>
+              <label class="field">
+                <span>power_on_settle</span>
+                <input id="hub-power-on-settle" type="text" value="400ms" />
+              </label>
+              <label class="field">
+                <span>Secret Key: mesh_name</span>
+                <input id="secret-mesh-name-key" type="text" value="smart_ledz_mesh_name" />
+              </label>
+              <label class="field">
+                <span>Secret Key: mesh_password</span>
+                <input id="secret-mesh-password-key" type="text" value="smart_ledz_mesh_password" />
+              </label>
+              <label class="field">
+                <span>Hub Extra YAML Lines</span>
+                <textarea
+                  id="hub-extra-yaml"
+                  rows="4"
+                  placeholder="example:\nretry_timeout: 3s"
+                ></textarea>
+              </label>
+            </details>
           </div>
         </div>
       </section>

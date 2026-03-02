@@ -563,40 +563,45 @@ function renderLightEditors() {
         </div>
         <span class="light-badge">${target.kind}</span>
       </div>
-      <div class="light-grid-fields">
+      <div class="light-grid-fields light-grid-basic-fields">
         <label class="field">
           <span>name</span>
           <input data-role="light-name" data-key="${escapeHtml(target.key)}" type="text" value="${escapeHtml(cfg.name)}" />
         </label>
-        <label class="field">
-          <span>id</span>
-          <input data-role="light-id" data-key="${escapeHtml(target.key)}" type="text" value="${escapeHtml(cfg.id)}" />
-        </label>
-        <label class="field">
-          <span>target</span>
-          <input data-role="light-target" data-key="${escapeHtml(target.key)}" type="text" value="${escapeHtml(cfg.target)}" />
-        </label>
-        <label class="field">
-          <span>device_type</span>
-          <select data-role="light-device-type" data-key="${escapeHtml(target.key)}">${deviceTypeOptions}</select>
-        </label>
-        <label class="field">
-          <span>ct_duv</span>
-          <select data-role="light-ct-duv" data-key="${escapeHtml(target.key)}">${ctdOptions}</select>
-        </label>
-        <label class="check-field">
-          <input data-role="light-ignore-transition" data-key="${escapeHtml(target.key)}" type="checkbox" ${
-            cfg.ignoreTransition ? "checked" : ""
-          } />
-          <span>ignore_transition</span>
-        </label>
       </div>
-      <label class="field">
-        <span>Light Extra YAML Lines</span>
-        <textarea data-role="light-extra" data-key="${escapeHtml(target.key)}" rows="3" placeholder="example:\ndefault_transition_length: 0s">${escapeHtml(
-          cfg.extraYaml
-        )}</textarea>
-      </label>
+      <details class="advanced-block">
+        <summary>Advanced Light Settings</summary>
+        <div class="light-grid-fields">
+          <label class="field">
+            <span>id</span>
+            <input data-role="light-id" data-key="${escapeHtml(target.key)}" type="text" value="${escapeHtml(cfg.id)}" />
+          </label>
+          <label class="field">
+            <span>target</span>
+            <input data-role="light-target" data-key="${escapeHtml(target.key)}" type="text" value="${escapeHtml(cfg.target)}" />
+          </label>
+          <label class="field">
+            <span>device_type</span>
+            <select data-role="light-device-type" data-key="${escapeHtml(target.key)}">${deviceTypeOptions}</select>
+          </label>
+          <label class="field">
+            <span>ct_duv</span>
+            <select data-role="light-ct-duv" data-key="${escapeHtml(target.key)}">${ctdOptions}</select>
+          </label>
+          <label class="check-field">
+            <input data-role="light-ignore-transition" data-key="${escapeHtml(target.key)}" type="checkbox" ${
+              cfg.ignoreTransition ? "checked" : ""
+            } />
+            <span>ignore_transition</span>
+          </label>
+        </div>
+        <label class="field">
+          <span>Light Extra YAML Lines</span>
+          <textarea data-role="light-extra" data-key="${escapeHtml(target.key)}" rows="3" placeholder="example:\ndefault_transition_length: 0s">${escapeHtml(
+            cfg.extraYaml
+          )}</textarea>
+        </label>
+      </details>
     `;
 
     refs.lightEditorList.appendChild(card);
