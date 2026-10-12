@@ -52,6 +52,10 @@ def sdk_options(entry):
     ]
     options += [f"-D{define}" for define in defines]
     for include in includes + get_toolchain_includes(compiler):
+        # Clang treats a directory present in both -I and -isystem as system.
+        # Do not accidentally suppress diagnostics in this checkout's headers.
+        if Path(include).resolve() in (ROOT, ROOT / "include", ROOT / "src"):
+            continue
         options += ["-isystem", include]
     return options
 
@@ -101,6 +105,7 @@ def main():
                     text=True,
                     capture_output=True,
                     check=True,
+                    env={**os.environ, "LC_ALL": "C"},
                 )
                 search = probe.stderr.split("#include <...> search starts here:")[
                     1
