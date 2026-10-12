@@ -14,6 +14,10 @@ polling queue; timeout cleanup; late completion; and sending after re-pairing.
 Sequence exhaustion must disconnect after the last write completes, and a new
 session must allow sending again. Light tests cover SYNCA notification updates
 across 1800–12000 K, duplicate suppression, and 2CH color temperature updates.
+Setup deadlines and callback failures must disconnect at every handshake stage,
+ignore late completion events, and allow a subsequent authenticated session.
+Offline reports must preserve the published power and brightness until an online
+report confirms a change.
 
 Physical BLE disconnection/reconnection is not simulated. The
 host tests verify that recovery requests a disconnect; reconnecting the actual

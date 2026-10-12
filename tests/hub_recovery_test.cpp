@@ -10,6 +10,15 @@ class TestHub : public SmartLedzHub {
  public:
   esphome::ble_client::BLEClient client;
   TestHub() { parent_ = &client; setup(); set_poll_interval_ms(0); }
+  void start_setup(unsigned step) {
+    session_.set_link_context(1, 1, client.address);
+    session_.set_characteristic_handles(1, 2, 3);
+    assert(session_.begin_pairing());
+    if (step >= 1) assert(session_.handle_write_char_evt(3, ESP_GATT_OK, nullptr, nullptr));
+    if (step >= 2) assert(session_.handle_read_char_evt(3, ESP_GATT_OK, pair_response.data(), pair_response.size(), nullptr, nullptr));
+    if (step >= 3) assert(session_.handle_reg_for_notify_evt(1, ESP_GATT_OK, nullptr, nullptr));
+    assert(!is_session_ready());
+  }
   void pair() {
     session_.set_link_context(1, 1, client.address);
     session_.set_characteristic_handles(1, 2, 3);
@@ -32,6 +41,42 @@ static void advance(TestHub &hub, uint32_t ms, bool ack = true) {
 }
 
 int main() {
+  for (unsigned step = 0; step < 4; ++step) {
+    fake_time_us = 0;
+    TestHub hub;
+    hub.start_setup(step);
+    advance(hub, 9999, false);
+    assert(hub.client.disconnects == 0);
+    advance(hub, 1, false);
+    assert(hub.client.disconnects == 1 && !hub.is_session_ready());
+    advance(hub, 10000, false);
+    assert(hub.client.disconnects == 1);
+    esp_ble_gattc_cb_param_t event{};
+    event.write = {1, 1, ESP_GATT_OK};
+    hub.gattc_event_handler(ESP_GATTC_WRITE_CHAR_EVT, 1, &event);
+    assert(!hub.is_session_ready());
+    hub.pair();
+    assert(hub.is_session_ready());
+  }
+  for (unsigned step = 0; step < 4; ++step) {
+    TestHub hub;
+    hub.start_setup(step);
+    esp_ble_gattc_cb_param_t event{};
+    if (step == 0 || step == 3) {
+      event.write = {1, static_cast<uint16_t>(step == 0 ? 3 : 1), 1};
+      hub.gattc_event_handler(ESP_GATTC_WRITE_CHAR_EVT, 1, &event);
+    } else if (step == 1) {
+      event.read = {1, 3, 1, nullptr, 0};
+      hub.gattc_event_handler(ESP_GATTC_READ_CHAR_EVT, 1, &event);
+    } else {
+      event.reg_for_notify = {1, 1};
+      hub.gattc_event_handler(ESP_GATTC_REG_FOR_NOTIFY_EVT, 1, &event);
+    }
+    assert(hub.client.disconnects == 1 && !hub.is_session_ready());
+    assert(hub.queue_size() == 0);
+    hub.pair();
+    assert(hub.is_session_ready());
+  }
   // Both sides of the signed boundary, and the 49.7-day millis rollover.
   for (int64_t start : {1000LL, 2147483247LL, 2147483648LL, 2160000000LL, 2592000000LL, 4294967095LL}) {
     fake_time_us = start * 1000;
@@ -103,5 +148,5 @@ int main() {
     advance(hub, 200);
     assert(hub.is_session_ready());
   }
-  std::cout << "Hub rollover and recovery tests passed\n";
+  std::cout << "Hub setup, rollover and recovery tests passed\n";
 }

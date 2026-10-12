@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: hrko/esp-telink-mesh
-          ref: 78e1946ff8fd705529da671d124dfb7b941fe050
+          ref: bf289fc21f58f15e9c40e2ed82639a99d2185aff
           path: esp-telink-mesh
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
