@@ -1,5 +1,7 @@
 #include "components/smart_ledz/smart_ledz.h"
 #include <esp_timer.h>
+#include <esp_random.h>
+#include <pair_fixture.h>
 #include <cassert>
 #include <iostream>
 using namespace esphome::smart_ledz;
@@ -13,8 +15,7 @@ class TestHub : public SmartLedzHub {
     session_.set_characteristic_handles(1, 2, 3);
     assert(session_.begin_pairing());
     session_.handle_write_char_evt(3, ESP_GATT_OK, nullptr, nullptr);
-    uint8_t response[9]{};
-    session_.handle_read_char_evt(3, ESP_GATT_OK, response, 9, nullptr, nullptr);
+    session_.handle_read_char_evt(3, ESP_GATT_OK, pair_response.data(), pair_response.size(), nullptr, nullptr);
     session_.handle_reg_for_notify_evt(1, ESP_GATT_OK, nullptr, nullptr);
     session_.handle_write_char_evt(1, ESP_GATT_OK, nullptr, nullptr);
     assert(is_session_ready());
@@ -85,6 +86,22 @@ int main() {
     assert(hub.send_on_off(1, true));
     advance(hub, 200);
     assert(control_writes == before + 1);
+  }
+  {
+    TestHub hub;
+    fake_random = 0xffffff;
+    hub.pair();
+    assert(hub.send_on_off(1, true));
+    hub.loop();
+    assert(hub.client.disconnects == 0);
+    advance(hub, 200);
+    assert(hub.client.disconnects == 1 && !hub.is_session_ready());
+    assert(hub.queue_size() == 0);
+    fake_random = 123;
+    hub.pair();
+    assert(hub.send_on_off(1, true));
+    advance(hub, 200);
+    assert(hub.is_session_ready());
   }
   std::cout << "Hub rollover and recovery tests passed\n";
 }

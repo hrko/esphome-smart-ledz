@@ -86,6 +86,12 @@ void SmartLedzHub::loop() {
   }
 
   const uint32_t now = millis();
+  if (this->session_.is_sequence_exhausted()) {
+    ESP_LOGI(TAG, "[%s] command sequence exhausted; reconnecting", this->parent_->address_str());
+    this->reset_runtime_state_();
+    this->parent_->disconnect();
+    return;
+  }
   if (this->session_.is_control_write_timed_out(CONTROL_WRITE_TIMEOUT_MS)) {
     ESP_LOGW(TAG, "[%s] control write timed out after %ums; clearing queued commands and reconnecting",
              this->parent_->address_str(), static_cast<unsigned>(CONTROL_WRITE_TIMEOUT_MS));

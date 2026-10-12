@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: hrko/esp-telink-mesh
-          ref: 642c5cf65426f2db73f14fb6f93d7a81b8076a55
+          ref: 78e1946ff8fd705529da671d124dfb7b941fe050
           path: esp-telink-mesh
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -23,6 +23,8 @@ jobs:
         with:
           version: 2026.10.3
           working_directory: esphome-smart-ledz
+      - name: Install host crypto test dependency
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
       - name: Host regression tests
         working-directory: esphome-smart-ledz
         run: |
