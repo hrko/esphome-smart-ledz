@@ -31,6 +31,9 @@ jobs:
           bash ../esp-telink-mesh/tests/run.sh
           bash ../smartledz-protocol/tests/run.sh
           mise run test
+      - name: YAML export regression tests
+        working-directory: esphome-smart-ledz
+        run: node tests/export_yaml_test.cjs
       - name: Lint and type check
         working-directory: esphome-smart-ledz
         run: mise run lint

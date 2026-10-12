@@ -16,6 +16,13 @@ namespace {
 
 static const char *const TAG = "smart_ledz";
 constexpr uint32_t VERIFY_DELAY_MS = 200;
+constexpr size_t MAX_TX_QUEUE_SIZE = 128;
+constexpr uint8_t MAX_TX_ATTEMPTS = 3;
+
+bool is_query(uint8_t opcode) {
+  return opcode == smartledz_protocol::v1::kOpcodeStatusQuery ||
+         opcode == smartledz_protocol::v1::kOpcodeDimmingQuery;
+}
 constexpr uint32_t CONTROL_WRITE_TIMEOUT_MS = 10000;
 constexpr uint32_t SESSION_SETUP_TIMEOUT_MS = 10000;
 
@@ -218,25 +225,10 @@ void SmartLedzHub::update_device_from_f1_response_(uint16_t src, const uint8_t *
   }
 }
 
-bool SmartLedzHub::send_packet_now_(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len) {
-  if (!this->session_.is_session_ready()) {
-    ESP_LOGW(TAG, "[%s] cannot send packet before pairing", this->parent_->address_str());
-    return false;
-  }
-
-  const auto result = this->session_.send_mesh_command(target, opcode, payload, payload_len);
-  if (result == esp_telink_mesh::v1::SendMeshCommandResult::SENT) {
-    return true;
-  }
-  if (result == esp_telink_mesh::v1::SendMeshCommandResult::BUSY_PENDING_ACK) {
-    return false;
-  }
-  if (result == esp_telink_mesh::v1::SendMeshCommandResult::NOT_READY) {
-    ESP_LOGW(TAG, "[%s] send_packet skipped: session not ready", this->parent_->address_str());
-    return false;
-  }
-  ESP_LOGW(TAG, "[%s] send_packet failed: write error", this->parent_->address_str());
-  return false;
+void SmartLedzHub::fail_tx_() {
+  ESP_LOGW(TAG, "control write failed; clearing commands and reconnecting");
+  this->reset_runtime_state_();
+  this->parent_->disconnect();
 }
 
 void SmartLedzHub::trim_queued_target_commands_(uint16_t target, uint8_t opcode, int8_t e2_subtype) {
@@ -296,6 +288,22 @@ bool SmartLedzHub::enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_
     }
   }
 
+  if (is_query(opcode)) {
+    for (const auto &queued : this->tx_queue_) {
+      if (queued.target == target && queued.opcode == opcode) {
+        return true;
+      }
+    }
+  }
+  if (this->tx_queue_.size() >= MAX_TX_QUEUE_SIZE) {
+    auto query = std::find_if(this->tx_queue_.begin(), this->tx_queue_.end(),
+                              [](const TxCommand &queued) { return is_query(queued.opcode); });
+    if (is_query(opcode) || query == this->tx_queue_.end()) {
+      ESP_LOGW(TAG, "TX queue full; rejecting command");
+      return false;
+    }
+    this->tx_queue_.erase(query);
+  }
   this->tx_queue_.push_back(cmd);
   return true;
 }
@@ -332,40 +340,56 @@ void SmartLedzHub::schedule_verify_queries_(uint16_t target, uint32_t now) {
 }
 
 void SmartLedzHub::process_tx_queue_(uint32_t now) {
-  if (this->tx_queue_.empty()) {
+  if (this->awaiting_ack_ || (now - this->last_tx_ms_) < this->tx_interval_ms_) {
     return;
   }
-  if ((now - this->last_tx_ms_) < this->tx_interval_ms_) {
-    return;
-  }
-
-  const auto &next = this->tx_queue_.front();
-  if (static_cast<int32_t>(now - next.not_before_ms) < 0) {
-    return;
-  }
-  if (!this->send_packet_now_(next.target, next.opcode, next.payload.data(), next.payload_len)) {
-    // Avoid hot-looping when the stack temporarily rejects a write.
-    this->last_tx_ms_ = now;
-    return;
-  }
-
-  const uint16_t sent_target = next.target;
-  const uint8_t sent_opcode = next.opcode;
-  const uint8_t sent_payload0 = next.payload_len > 0 ? next.payload[0] : 0;
-  const bool should_verify = next.verify_after_send;
-  this->tx_queue_.pop_front();
-  this->last_tx_ms_ = now;
-
-  if (sent_opcode == smartledz_protocol::v1::kOpcodeOnOff) {
-    if (sent_payload0 != 0x00) {
-      this->apply_power_on_hold_(sent_target, now);
-    } else {
-      this->target_hold_until_ms_.erase(sent_target);
+  if (!this->has_active_tx_) {
+    // Only the earliest operation for each target may run. Queries yield to
+    // controls, but controls for the same target retain their relative order.
+    auto selected = this->tx_queue_.end();
+    std::set<uint16_t> blocked;
+    for (auto it = this->tx_queue_.begin(); it != this->tx_queue_.end(); ++it) {
+      if (blocked.count(it->target) != 0) {
+        continue;
+      }
+      if (!is_query(it->opcode)) {
+        blocked.insert(it->target);
+      }
+      if (static_cast<int32_t>(now - it->not_before_ms) < 0) {
+        continue;
+      }
+      if (selected == this->tx_queue_.end() ||
+          (is_query(selected->opcode) && !is_query(it->opcode))) {
+        selected = it;
+      }
     }
+    if (selected == this->tx_queue_.end()) {
+      return;
+    }
+    this->active_tx_ = *selected;
+    this->tx_queue_.erase(selected);
+    this->has_active_tx_ = true;
   }
-
-  if (should_verify) {
-    this->schedule_verify_queries_(sent_target, now);
+  auto &cmd = this->active_tx_;
+  const auto result = this->session_.send_mesh_command(cmd.target, cmd.opcode, cmd.payload.data(), cmd.payload_len);
+  this->last_tx_ms_ = now;
+  if (result == esp_telink_mesh::v1::SendMeshCommandResult::BUSY_PENDING_ACK) {
+    return;
+  }
+  ++cmd.attempts;
+  if (result != esp_telink_mesh::v1::SendMeshCommandResult::SENT) {
+    if (cmd.attempts >= MAX_TX_ATTEMPTS) {
+      this->fail_tx_();
+    }
+    return;
+  }
+  this->awaiting_ack_ = true;
+  if (cmd.opcode == smartledz_protocol::v1::kOpcodeOnOff) {
+    if (cmd.payload_len > 0 && cmd.payload[0] != 0) {
+      this->apply_power_on_hold_(cmd.target, now);
+    } else {
+      this->target_hold_until_ms_.erase(cmd.target);
+    }
   }
 }
 
@@ -375,29 +399,29 @@ bool SmartLedzHub::send_packet(uint16_t target, uint8_t opcode, const uint8_t *p
 
 bool SmartLedzHub::send_on_off(uint16_t target, bool on) {
   const auto cmd = smartledz_protocol::v1::make_on_off(on);
+  if (!this->enqueue_packet_(target, cmd.opcode, cmd.payload.data(), cmd.payload_len, millis(), true)) {
+    return false;
+  }
   this->trim_queued_target_commands_(target, smartledz_protocol::v1::kOpcodeBrightness, -1);
   this->trim_queued_target_commands_(target, smartledz_protocol::v1::kOpcodeColor, -1);
   if (!on) {
     this->target_hold_until_ms_.erase(target);
   }
 
-  auto ok = this->enqueue_packet_(target, cmd.opcode, cmd.payload.data(), cmd.payload_len, millis(), true);
-  if (ok) {
-    auto &state = this->state_ref_(target);
-    state.seen = true;
-    state.has_power = true;
-    state.power = on;
-    if (!on) {
-      state.has_online_brightness = true;
-      state.online_brightness = 0;
-      state.has_brightness = true;
-      state.brightness = 0;
-    } else {
-      state.has_brightness = false;
-    }
-    state.last_update_ms = millis();
+  auto &state = this->state_ref_(target);
+  state.seen = true;
+  state.has_power = true;
+  state.power = on;
+  if (!on) {
+    state.has_online_brightness = true;
+    state.online_brightness = 0;
+    state.has_brightness = true;
+    state.brightness = 0;
+  } else {
+    state.has_brightness = false;
   }
-  return ok;
+  state.last_update_ms = millis();
+  return true;
 }
 
 bool SmartLedzHub::send_brightness(uint16_t target, uint8_t brightness) {
@@ -474,6 +498,11 @@ void SmartLedzHub::reset_runtime_state_() {
   this->last_poll_ms_ = 0;
   this->poll_cursor_ = 0;
   this->tx_queue_.clear();
+  this->has_active_tx_ = false;
+  this->awaiting_ack_ = false;
+  for (auto *listener : this->state_listeners_) {
+    listener->on_smart_ledz_session_reset();
+  }
   this->target_hold_until_ms_.clear();
   this->last_tx_ms_ = 0;
 }
@@ -507,10 +536,25 @@ void SmartLedzHub::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t
       if (param->write.conn_id != this->parent_->get_conn_id()) {
         break;
       }
+      const bool control_completion = this->awaiting_ack_ && param->write.handle == this->session_.control_handle();
       bool need_disconnect = false;
       bool session_established = false;
       this->session_.handle_write_char_evt(param->write.handle, param->write.status, &need_disconnect,
                                            &session_established);
+      if (control_completion) {
+        this->awaiting_ack_ = false;
+        if (param->write.status == ESP_GATT_OK) {
+          const auto completed = this->active_tx_;
+          this->has_active_tx_ = false;
+          if (completed.verify_after_send) {
+            this->schedule_verify_queries_(completed.target, millis());
+          }
+        } else if (this->active_tx_.attempts >= MAX_TX_ATTEMPTS ||
+                   (!this->active_tx_.verify_after_send && !is_query(this->active_tx_.opcode))) {
+          // Raw commands may not be idempotent: never replay them after an ambiguous completion.
+          this->fail_tx_();
+        }
+      }
       if (need_disconnect) {
         this->reset_runtime_state_();
         this->parent_->disconnect();

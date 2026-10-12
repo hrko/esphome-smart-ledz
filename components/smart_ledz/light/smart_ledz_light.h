@@ -23,6 +23,7 @@ class SmartLedzLightOutput : public light::LightOutput,
   light::LightTraits get_traits() override;
   void setup_state(light::LightState *state) override;
   void write_state(light::LightState *state) override;
+  void on_smart_ledz_session_reset() override;
   void on_smart_ledz_state_update(uint16_t address, const SmartLedzDeviceStateSnapshot &state) override;
 
  protected:

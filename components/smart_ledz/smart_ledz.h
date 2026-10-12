@@ -34,6 +34,7 @@ enum SmartLedzDeviceType : uint8_t {
 class SmartLedzStateListener {
  public:
   virtual ~SmartLedzStateListener() = default;
+  virtual void on_smart_ledz_session_reset() {}
   virtual void on_smart_ledz_state_update(uint16_t address, const SmartLedzDeviceStateSnapshot &state) = 0;
 };
 
@@ -78,12 +79,13 @@ class SmartLedzHub : public ble_client::BLEClientNode, public Component {
     uint8_t payload_len{0};
     uint32_t not_before_ms{0};
     bool verify_after_send{false};
+    uint8_t attempts{0};
   };
 
   void configure_session_();
   bool discover_characteristics_();
   void reset_runtime_state_();
-  bool send_packet_now_(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len);
+  void fail_tx_();
   bool enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len,
                        uint32_t not_before_ms, bool verify_after_send);
   void process_tx_queue_(uint32_t now);
@@ -110,6 +112,9 @@ class SmartLedzHub : public ble_client::BLEClientNode, public Component {
   uint32_t last_poll_ms_{0};
   uint16_t poll_cursor_{0};
   std::deque<TxCommand> tx_queue_;
+  TxCommand active_tx_{};
+  bool has_active_tx_{false};
+  bool awaiting_ack_{false};
   std::map<uint16_t, uint32_t> target_hold_until_ms_;
   uint32_t tx_interval_ms_{120};
   uint32_t power_on_settle_ms_{400};

@@ -19,6 +19,15 @@ ignore late completion events, and allow a subsequent authenticated session.
 Offline reports must preserve the published power and brightness until an online
 report confirms a change.
 
+TX regression tests cover immediate write rejection, asynchronous completion
+errors, bounded retries, raw-command failures, independent targets during a
+power-on hold, query deduplication, queue limits, and color cancellation across
+OFF/ON and session resets. A session reset invalidates the light's send cache;
+it does not automatically replay previous user commands on reconnect.
+
+Run `node tests/export_yaml_test.cjs` for the export tool's nested YAML and
+multiline/blank-line preservation tests. CI runs this separately from C++ tests.
+
 Physical BLE disconnection/reconnection is not simulated. The
 host tests verify that recovery requests a disconnect; reconnecting the actual
 device still depends on ESPHome's BLE client and `auto_connect: true`.
