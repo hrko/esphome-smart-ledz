@@ -1,0 +1,13 @@
+Checks: >-
+  -*,
+  clang-analyzer-*,
+  bugprone-assert-side-effect,
+  bugprone-branch-clone,
+  bugprone-infinite-loop,
+  bugprone-sizeof-expression,
+  bugprone-suspicious-memset-usage,
+  bugprone-use-after-move,
+  performance-for-range-copy,
+  performance-unnecessary-copy-initialization
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*(components[/\\]smart_ledz|include[/\\](esp_telink_mesh|smartledz_protocol))[/\\].*'

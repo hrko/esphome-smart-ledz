@@ -10,3 +10,4 @@ __pycache__/
 
 # Lint/type-check caches.
 .ruff_cache/
+.venv/

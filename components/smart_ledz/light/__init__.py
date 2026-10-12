@@ -1,6 +1,6 @@
 import esphome.codegen as cg
-from esphome.components import light, number
 import esphome.config_validation as cv
+from esphome.components import light, number
 from esphome.const import (
     CONF_INITIAL_VALUE,
     CONF_NAME,
