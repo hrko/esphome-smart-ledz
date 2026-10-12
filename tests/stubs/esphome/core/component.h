@@ -1,5 +1,11 @@
 #pragma once
 namespace esphome {
+template<typename T> class Parented {
+ public:
+  void set_parent(T *parent) { parent_ = parent; }
+ protected:
+  T *parent_ = nullptr;
+};
 namespace setup_priority { constexpr float BLUETOOTH = 100; }
 class Component {
  public:

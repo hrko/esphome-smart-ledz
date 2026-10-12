@@ -17,6 +17,7 @@ namespace {
 static const char *const TAG = "smart_ledz";
 constexpr uint32_t VERIFY_DELAY_MS = 200;
 constexpr uint32_t CONTROL_WRITE_TIMEOUT_MS = 10000;
+constexpr uint32_t SESSION_SETUP_TIMEOUT_MS = 10000;
 
 const espbt::ESPBTUUID TELINK_SERVICE_UUID = espbt::ESPBTUUID::from_raw("00010203-0405-0607-0809-0a0b0c0d1910");
 const espbt::ESPBTUUID TELINK_NOTIFY_UUID = espbt::ESPBTUUID::from_raw("00010203-0405-0607-0809-0a0b0c0d1911");
@@ -81,11 +82,23 @@ void SmartLedzHub::register_polled_target(uint16_t target) {
 }
 
 void SmartLedzHub::loop() {
+  if (this->session_.is_setup_timed_out(SESSION_SETUP_TIMEOUT_MS)) {
+    ESP_LOGW(TAG, "[%s] session setup timed out; reconnecting", this->parent_->address_str());
+    this->reset_runtime_state_();
+    this->parent_->disconnect();
+    return;
+  }
   if (!this->session_.is_session_ready()) {
     return;
   }
 
   const uint32_t now = millis();
+  if (this->session_.is_sequence_exhausted()) {
+    ESP_LOGI(TAG, "[%s] command sequence exhausted; reconnecting", this->parent_->address_str());
+    this->reset_runtime_state_();
+    this->parent_->disconnect();
+    return;
+  }
   if (this->session_.is_control_write_timed_out(CONTROL_WRITE_TIMEOUT_MS)) {
     ESP_LOGW(TAG, "[%s] control write timed out after %ums; clearing queued commands and reconnecting",
              this->parent_->address_str(), static_cast<unsigned>(CONTROL_WRITE_TIMEOUT_MS));
@@ -499,6 +512,7 @@ void SmartLedzHub::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t
       this->session_.handle_write_char_evt(param->write.handle, param->write.status, &need_disconnect,
                                            &session_established);
       if (need_disconnect) {
+        this->reset_runtime_state_();
         this->parent_->disconnect();
         break;
       }
@@ -515,6 +529,7 @@ void SmartLedzHub::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t
       this->session_.handle_reg_for_notify_evt(param->reg_for_notify.handle, param->reg_for_notify.status,
                                                &need_disconnect, &session_established);
       if (need_disconnect) {
+        this->reset_runtime_state_();
         this->parent_->disconnect();
         break;
       }
@@ -534,6 +549,7 @@ void SmartLedzHub::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t
       this->session_.handle_read_char_evt(param->read.handle, param->read.status, param->read.value,
                                           param->read.value_len, &need_disconnect, &session_established);
       if (need_disconnect) {
+        this->reset_runtime_state_();
         this->parent_->disconnect();
         break;
       }

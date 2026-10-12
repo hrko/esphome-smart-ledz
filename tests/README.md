@@ -2,16 +2,24 @@
 
 Clone `esp-telink-mesh` and `smartledz-protocol` beside this repository, at the
 commits pinned in `components/smart_ledz/__init__.py`. Then run `bash tests/run.sh`
-on Linux/WSL with g++ (C++17). Alternate checkout locations can be supplied with
+on Linux/WSL with g++ (C++17) and OpenSSL development headers (`libssl-dev`). Alternate checkout locations can be supplied with
 `ESP_TELINK_MESH_DIR` and `SMARTLEDZ_PROTOCOL_DIR`.
 
 The tests compile the production hub, session client, command encoder, and state
-decoder against fake ESPHome/GATT/clock/AES APIs. They verify the 400 ms power-on
+decoder against fake ESPHome/GATT/clock APIs and an OpenSSL-backed AES adapter. They verify the 400 ms power-on
 hold before and after 2^31 ms, at 25 and 30 days, and across the uint32_t rollover;
 expiry cleanup; repeated power cycles; missing write completion with an empty or
 polling queue; timeout cleanup; late completion; and sending after re-pairing.
 
-Physical BLE disconnection/reconnection and encryption are not simulated. The
+Sequence exhaustion must disconnect after the last write completes, and a new
+session must allow sending again. Light tests cover SYNCA notification updates
+across 1800–12000 K, duplicate suppression, and 2CH color temperature updates.
+Setup deadlines and callback failures must disconnect at every handshake stage,
+ignore late completion events, and allow a subsequent authenticated session.
+Offline reports must preserve the published power and brightness until an online
+report confirms a change.
+
+Physical BLE disconnection/reconnection is not simulated. The
 host tests verify that recovery requests a disconnect; reconnecting the actual
 device still depends on ESPHome's BLE client and `auto_connect: true`.
 

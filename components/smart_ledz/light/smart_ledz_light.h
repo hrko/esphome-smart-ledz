@@ -40,6 +40,8 @@ class SmartLedzLightOutput : public light::LightOutput,
   uint8_t last_brightness_{0};
   bool has_last_ct_raw_{false};
   uint8_t last_ct_raw_{0};
+  bool has_last_synca_kelvin_{false};
+  uint16_t last_synca_kelvin_{0};
   bool has_last_rgb_{false};
   std::array<uint8_t, 3> last_rgb_{0, 0, 0};
   light::ColorMode preferred_synca_mode_{light::ColorMode::UNKNOWN};

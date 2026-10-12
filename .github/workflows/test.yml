@@ -12,21 +12,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: hrko/esp-telink-mesh
-          ref: 642c5cf65426f2db73f14fb6f93d7a81b8076a55
+          ref: bf289fc21f58f15e9c40e2ed82639a99d2185aff
           path: esp-telink-mesh
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: hrko/smartledz-protocol
-          ref: 92cb07fcf75d264319f47da62560c23e1d8065e2
+          ref: f70f4a028ce70769bd670deecdb663f549905550
           path: smartledz-protocol
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: 2026.10.3
           working_directory: esphome-smart-ledz
+      - name: Install host crypto test dependency
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
       - name: Host regression tests
         working-directory: esphome-smart-ledz
         run: |
           bash ../esp-telink-mesh/tests/run.sh
+          bash ../smartledz-protocol/tests/run.sh
           mise run test
       - name: Lint and type check
         working-directory: esphome-smart-ledz

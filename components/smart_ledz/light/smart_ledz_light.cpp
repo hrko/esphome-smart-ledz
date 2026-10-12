@@ -125,6 +125,7 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
     } else {
       if (mode == light::ColorMode::RGB) {
         this->preferred_synca_mode_ = light::ColorMode::RGB;
+        this->has_last_synca_kelvin_ = false;
       }
       float red = 0.0f;
       float green = 0.0f;
@@ -214,7 +215,6 @@ void SmartLedzLightOutput::sync_from_device_state_(const SmartLedzDeviceStateSna
   bool apply_rgb_from_notify = false;
   bool synca_ct_changed = false;
   uint16_t synca_kelvin = 0;
-  uint8_t synca_ct_raw = 0;
 
   if (device_type == SMART_LEDZ_DEVICE_TYPE_TUNABLE && device.has_ct && device.ct_raw >= 18) {
     ct_changed = !this->has_last_ct_raw_ || this->last_ct_raw_ != device.ct_raw;
@@ -230,10 +230,10 @@ void SmartLedzLightOutput::sync_from_device_state_(const SmartLedzDeviceStateSna
     if (effective_mode == light::ColorMode::COLOR_TEMPERATURE) {
       synca_kelvin = smartledz_protocol::v1::estimate_cct_from_rgb(device.rgb[0], device.rgb[1], device.rgb[2],
                                                                     this->ct_duv_);
-      synca_ct_raw = kelvin_to_ct_raw_(synca_kelvin);
-      synca_ct_changed = !this->has_last_ct_raw_ || this->last_ct_raw_ != synca_ct_raw;
+      synca_ct_changed = !this->has_last_synca_kelvin_ || this->last_synca_kelvin_ != synca_kelvin;
     } else {
       apply_rgb_from_notify = true;
+      this->has_last_synca_kelvin_ = false;
     }
   }
 
@@ -281,8 +281,8 @@ void SmartLedzLightOutput::sync_from_device_state_(const SmartLedzDeviceStateSna
     call.set_color_mode_if_supported(light::ColorMode::COLOR_TEMPERATURE);
     call.set_color_temperature(1000000.0f / static_cast<float>(synca_kelvin));
     this->preferred_synca_mode_ = light::ColorMode::COLOR_TEMPERATURE;
-    this->has_last_ct_raw_ = true;
-    this->last_ct_raw_ = synca_ct_raw;
+    this->has_last_synca_kelvin_ = true;
+    this->last_synca_kelvin_ = synca_kelvin;
   } else if (device_type == SMART_LEDZ_DEVICE_TYPE_SYNCA && device.has_rgb && apply_rgb_from_notify && rgb_changed) {
     call.set_color_mode_if_supported(light::ColorMode::RGB);
     call.set_rgb(device.rgb[0] / 255.0f, device.rgb[1] / 255.0f, device.rgb[2] / 255.0f);
