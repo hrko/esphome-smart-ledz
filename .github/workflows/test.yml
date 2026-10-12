@@ -6,20 +6,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: esphome-smart-ledz
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: hrko/esp-telink-mesh
-          ref: 107843e0cf624bc0ad805a1f008686acf6bfb344
+          ref: 642c5cf65426f2db73f14fb6f93d7a81b8076a55
           path: esp-telink-mesh
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: hrko/smartledz-protocol
           ref: 5d234fcfa97b45bcb9d7200ebfa82561259af1db
           path: smartledz-protocol
-      - uses: jdx/mise-action@v5.1.1
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           working_directory: esphome-smart-ledz
       - name: Host regression tests

@@ -11,7 +11,8 @@
 - Pin the timeout-capable `esp-telink-mesh` revision and the latest
   `smartledz-protocol` revision.
 - Update development dependencies to ESPHome 2026.9.1, Python 3.15.0, uv 0.13.0,
-  Ruff 0.17.0, and ty 0.0.86, and update GitHub Actions dependencies.
+  Ruff 0.17.0, and ty 0.0.86, and update GitHub Actions dependencies. Action
+  references are pinned to full commit SHAs with verified version comments using pinact.
 - Enable `mise.lock` for Python/uv on Linux x64 and Windows x64, and add `uv.lock`
   for Python packages (including source distributions needed by ESPHome).
 - Add host regression tests and ESP32-S3 firmware compilation to CI.
