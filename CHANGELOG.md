@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.3 - 2026-10-12
+
+- Resend color on OFF/ON and invalidate light send caches when the session resets,
+  so canceled commands do not suppress subsequent color changes.
+- Retain commands until GATT completion, limit write attempts to three, and
+  reconnect after repeated failures. Arbitrary raw commands are not replayed
+  after ambiguous completion errors. Reconnect does not replay old requests.
+- Allow independent targets to proceed during power-on holds while preserving
+  control order per target. Prioritize controls, deduplicate queries, and limit
+  the waiting queue to 128 commands.
+- Preserve relative indentation and blank lines in additional exported YAML.
+- Add regression coverage for transmission recovery, queue scheduling, color
+  cancellation, and YAML export. Dependency library pins are unchanged.
+
+CI passes host regression tests, Python lint/type checks, C++ static analysis,
+and ESP32-S3 firmware compilation. Basic operations were manually confirmed on
+physical lighting hardware. Failure recovery and multi-target scheduling were
+verified by automated tests; hardware validation of these paths is pending.
+
 ## 0.2.2 - 2026-10-12
 
 - Synchronize SYNCA color temperature across the full 1800–12000 K range.
