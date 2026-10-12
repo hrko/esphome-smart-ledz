@@ -47,9 +47,9 @@ void SmartLedzHub::dump_config() {
   ESP_LOGCONFIG(TAG, "  Address: %s", this->parent_->address_str());
   ESP_LOGCONFIG(TAG, "  Vendor: 0x%04X", this->vendor_id_);
   ESP_LOGCONFIG(TAG, "  Session Ready: %s", YESNO(this->session_.is_session_ready()));
-  ESP_LOGCONFIG(TAG, "  Poll Interval: %ums", this->poll_interval_ms_);
-  ESP_LOGCONFIG(TAG, "  TX Interval: %ums", this->tx_interval_ms_);
-  ESP_LOGCONFIG(TAG, "  Power-on Settle: %ums", this->power_on_settle_ms_);
+  ESP_LOGCONFIG(TAG, "  Poll Interval: %ums", static_cast<unsigned>(this->poll_interval_ms_));
+  ESP_LOGCONFIG(TAG, "  TX Interval: %ums", static_cast<unsigned>(this->tx_interval_ms_));
+  ESP_LOGCONFIG(TAG, "  Power-on Settle: %ums", static_cast<unsigned>(this->power_on_settle_ms_));
 }
 
 SmartLedzHub::DeviceState &SmartLedzHub::state_ref_(uint16_t address) {
@@ -88,7 +88,7 @@ void SmartLedzHub::loop() {
   const uint32_t now = millis();
   if (this->session_.is_control_write_timed_out(CONTROL_WRITE_TIMEOUT_MS)) {
     ESP_LOGW(TAG, "[%s] control write timed out after %ums; clearing queued commands and reconnecting",
-             this->parent_->address_str(), CONTROL_WRITE_TIMEOUT_MS);
+             this->parent_->address_str(), static_cast<unsigned>(CONTROL_WRITE_TIMEOUT_MS));
     this->reset_runtime_state_();
     this->parent_->disconnect();
     return;
