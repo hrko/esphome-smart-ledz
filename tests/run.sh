@@ -10,3 +10,4 @@ g++ -std=c++17 -Wall -Wextra -Werror -DUSE_ESP32 \
   components/smart_ledz/smart_ledz.cpp "$mesh/src/session_client.cpp" \
   "$protocol/src/commands.cpp" "$protocol/src/state_codec.cpp" tests/hub_recovery_test.cpp -o "$binary"
 "$binary"
+bash tests/run_light.sh
