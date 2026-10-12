@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: hrko/smartledz-protocol
-          ref: 5d234fcfa97b45bcb9d7200ebfa82561259af1db
+          ref: 92cb07fcf75d264319f47da62560c23e1d8065e2
           path: smartledz-protocol
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:

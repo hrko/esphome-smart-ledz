@@ -18,7 +18,7 @@ ESP_TELINK_MESH_REPOSITORY = (
     "https://github.com/hrko/esp-telink-mesh.git#642c5cf65426f2db73f14fb6f93d7a81b8076a55"
 )
 SMARTLEDZ_PROTOCOL_REPOSITORY = (
-    "https://github.com/hrko/smartledz-protocol.git#5d234fcfa97b45bcb9d7200ebfa82561259af1db"
+    "https://github.com/hrko/smartledz-protocol.git#92cb07fcf75d264319f47da62560c23e1d8065e2"
 )
 
 smart_ledz_ns = cg.esphome_ns.namespace("smart_ledz")
