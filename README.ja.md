@@ -112,6 +112,10 @@ Smart LEDZ は Telink Mesh 上に構築された Bluetooth メッシュシステ
 - Smart LEDZ プロトコル層: https://github.com/hrko/smartledz-protocol
 - ESPHome 統合層: `components/smart_ledz/`
 
+## Home Assistant 統合への移植について
+
+移植の検証結果と ESPHome 構成を維持する理由は、[Home Assistant 統合への移植について](docs/home-assistant-port.md)を参照してください。
+
 ## 免責事項 (Disclaimer)
 
 本プロジェクト（esphome-smart-ledz）は、個人的な技術研究およびオープンソースのホームオートメーションシステム（Home Assistant等）との相互運用性を確保する目的で作成された非公式のプロジェクトです。

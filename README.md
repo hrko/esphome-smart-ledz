@@ -114,6 +114,10 @@ Behavior:
 - Smart LEDZ protocol layer: https://github.com/hrko/smartledz-protocol
 - ESPHome integration layer: `components/smart_ledz/`
 
+## Porting to a Home Assistant Integration
+
+See [Home Assistant port evaluation (Japanese)](docs/home-assistant-port.md) for the findings and the reasons for retaining the ESPHome architecture.
+
 ## Disclaimer
 
 This is an unofficial project created for personal technical research and to ensure interoperability with open-source home automation systems like Home Assistant. 
