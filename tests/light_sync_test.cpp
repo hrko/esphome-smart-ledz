@@ -34,5 +34,27 @@ int main() {
   device.ct_raw = 65;
   tunable.on_smart_ledz_state_update(2, device);
   assert(std::abs(tunable_state.remote_values.kelvin - 6500) < 1);
-  std::cout << "SYNCA full-range color temperature synchronization tests passed\n";
+  SmartLedzLightOutput dimmable;
+  dimmable.set_target(3);
+  esphome::light::LightState dimmable_state;
+  dimmable_state.output = &dimmable;
+  dimmable.setup_state(&dimmable_state);
+  std::map<uint16_t, SmartLedzDeviceStateSnapshot> states;
+  uint8_t online[] = {3, 1, 70, 1};
+  smartledz_protocol::v1::apply_online_status_payload(online, sizeof(online), 1, &states, nullptr);
+  dimmable.on_smart_ledz_state_update(3, states.at(3));
+  const auto publications = dimmable_state.publications;
+  online[1] = 0;
+  online[2] = 0;
+  smartledz_protocol::v1::apply_online_status_payload(online, sizeof(online), 2, &states, nullptr);
+  dimmable.on_smart_ledz_state_update(3, states.at(3));
+  assert(!states.at(3).reachable);
+  assert(dimmable_state.remote_values.is_on());
+  assert(std::abs(dimmable_state.remote_values.brightness - 0.7f) < 0.001f);
+  assert(dimmable_state.publications == publications);
+  online[1] = 1;
+  smartledz_protocol::v1::apply_online_status_payload(online, sizeof(online), 3, &states, nullptr);
+  dimmable.on_smart_ledz_state_update(3, states.at(3));
+  assert(!dimmable_state.remote_values.is_on());
+  std::cout << "Light temperature and offline state synchronization tests passed\n";
 }
