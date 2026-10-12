@@ -1051,11 +1051,12 @@ function appendExtraYaml(lines, rawText, indentSpaces) {
     return;
   }
   const indent = " ".repeat(indentSpaces);
-  rawText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .forEach((line) => lines.push(indent + line));
+  const extraLines = rawText.replace(/\r\n?/g, "\n").split("\n");
+  const nonEmpty = extraLines.filter((line) => line.trim());
+  const commonIndent = Math.min(...nonEmpty.map((line) => line.match(/^ */)[0].length));
+  for (const line of extraLines) {
+    lines.push(indent + line.slice(commonIndent));
+  }
 }
 
 function appendDuvNumberYaml(lines, cfg) {

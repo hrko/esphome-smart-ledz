@@ -6,33 +6,7 @@
 #include <iostream>
 using namespace esphome::smart_ledz;
 
-class TestHub : public SmartLedzHub {
- public:
-  esphome::ble_client::BLEClient client;
-  TestHub() { parent_ = &client; setup(); set_poll_interval_ms(0); }
-  void start_setup(unsigned step) {
-    session_.set_link_context(1, 1, client.address);
-    session_.set_characteristic_handles(1, 2, 3);
-    assert(session_.begin_pairing());
-    if (step >= 1) assert(session_.handle_write_char_evt(3, ESP_GATT_OK, nullptr, nullptr));
-    if (step >= 2) assert(session_.handle_read_char_evt(3, ESP_GATT_OK, pair_response.data(), pair_response.size(), nullptr, nullptr));
-    if (step >= 3) assert(session_.handle_reg_for_notify_evt(1, ESP_GATT_OK, nullptr, nullptr));
-    assert(!is_session_ready());
-  }
-  void pair() {
-    session_.set_link_context(1, 1, client.address);
-    session_.set_characteristic_handles(1, 2, 3);
-    assert(session_.begin_pairing());
-    session_.handle_write_char_evt(3, ESP_GATT_OK, nullptr, nullptr);
-    session_.handle_read_char_evt(3, ESP_GATT_OK, pair_response.data(), pair_response.size(), nullptr, nullptr);
-    session_.handle_reg_for_notify_evt(1, ESP_GATT_OK, nullptr, nullptr);
-    session_.handle_write_char_evt(1, ESP_GATT_OK, nullptr, nullptr);
-    assert(is_session_ready());
-  }
-  void ack() { session_.handle_write_char_evt(2, ESP_GATT_OK, nullptr, nullptr); }
-  size_t queue_size() { return tx_queue_.size(); }
-  size_t holds() { return target_hold_until_ms_.size(); }
-};
+#include "test_hub.h"
 
 static void advance(TestHub &hub, uint32_t ms, bool ack = true) {
   fake_time_us += static_cast<int64_t>(ms) * 1000;

@@ -69,6 +69,14 @@ void SmartLedzLightOutput::apply_ct_duv_update_from_number() {
   this->write_state(this->state_);
 }
 
+void SmartLedzLightOutput::on_smart_ledz_session_reset() {
+  this->has_last_state_ = false;
+  this->has_last_ct_raw_ = false;
+  this->has_last_rgb_ = false;
+  this->has_last_synca_kelvin_ = false;
+  this->suppress_write_ = false;
+}
+
 void SmartLedzLightOutput::write_state(light::LightState *state) {
   if (this->suppress_write_) {
     this->suppress_write_ = false;
@@ -108,7 +116,7 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
   if (is_on && device_type == SMART_LEDZ_DEVICE_TYPE_TUNABLE) {
     const auto kelvin = values.get_color_temperature_kelvin();
     desired_ct_raw = kelvin_to_ct_raw_(kelvin);
-    should_send_ct = !this->has_last_ct_raw_ || this->last_ct_raw_ != desired_ct_raw;
+    should_send_ct = should_send_on_off || !this->has_last_ct_raw_ || this->last_ct_raw_ != desired_ct_raw;
   } else if (is_on && device_type == SMART_LEDZ_DEVICE_TYPE_SYNCA) {
     auto mode = values.get_color_mode();
     if (mode == light::ColorMode::COLOR_TEMPERATURE) {
@@ -135,7 +143,7 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
       desired_g = static_cast<uint8_t>(std::max(0, std::min(255, static_cast<int>(roundf(green * 255.0f)))));
       desired_b = static_cast<uint8_t>(std::max(0, std::min(255, static_cast<int>(roundf(blue * 255.0f)))));
     }
-    should_send_rgb = !this->has_last_rgb_ || this->last_rgb_[0] != desired_r || this->last_rgb_[1] != desired_g ||
+    should_send_rgb = should_send_on_off || !this->has_last_rgb_ || this->last_rgb_[0] != desired_r || this->last_rgb_[1] != desired_g ||
                       this->last_rgb_[2] != desired_b;
   }
 
