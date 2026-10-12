@@ -1,6 +1,6 @@
 import esphome.codegen as cg
-from esphome.components import ble_client
 import esphome.config_validation as cv
+from esphome.components import ble_client
 from esphome.const import CONF_ID
 
 CONF_MESH_NAME = "mesh_name"
@@ -15,10 +15,10 @@ DEPENDENCIES = ["ble_client"]
 AUTO_LOAD = ["ble_client"]
 MULTI_CONF = True
 ESP_TELINK_MESH_REPOSITORY = (
-    "https://github.com/hrko/esp-telink-mesh.git#a2ab7d9282ef9a85d5640a5a5026c871cca7645a"
+    "https://github.com/hrko/esp-telink-mesh.git#107843e0cf624bc0ad805a1f008686acf6bfb344"
 )
 SMARTLEDZ_PROTOCOL_REPOSITORY = (
-    "https://github.com/hrko/smartledz-protocol.git#2afbab0741dd151a295650fd52483e5f1c719bad"
+    "https://github.com/hrko/smartledz-protocol.git#5d234fcfa97b45bcb9d7200ebfa82561259af1db"
 )
 
 smart_ledz_ns = cg.esphome_ns.namespace("smart_ledz")

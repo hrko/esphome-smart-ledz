@@ -16,6 +16,7 @@ namespace {
 
 static const char *const TAG = "smart_ledz";
 constexpr uint32_t VERIFY_DELAY_MS = 200;
+constexpr uint32_t CONTROL_WRITE_TIMEOUT_MS = 10000;
 
 const espbt::ESPBTUUID TELINK_SERVICE_UUID = espbt::ESPBTUUID::from_raw("00010203-0405-0607-0809-0a0b0c0d1910");
 const espbt::ESPBTUUID TELINK_NOTIFY_UUID = espbt::ESPBTUUID::from_raw("00010203-0405-0607-0809-0a0b0c0d1911");
@@ -85,6 +86,23 @@ void SmartLedzHub::loop() {
   }
 
   const uint32_t now = millis();
+  if (this->session_.is_control_write_timed_out(CONTROL_WRITE_TIMEOUT_MS)) {
+    ESP_LOGW(TAG, "[%s] control write timed out after %ums; clearing queued commands and reconnecting",
+             this->parent_->address_str(), CONTROL_WRITE_TIMEOUT_MS);
+    this->reset_runtime_state_();
+    this->parent_->disconnect();
+    return;
+  }
+
+  // Deadlines must not survive for half the uint32_t clock range, when signed
+  // comparisons would mistake an old deadline for a future one.
+  for (auto it = this->target_hold_until_ms_.begin(); it != this->target_hold_until_ms_.end();) {
+    if (static_cast<int32_t>(now - it->second) >= 0) {
+      it = this->target_hold_until_ms_.erase(it);
+    } else {
+      ++it;
+    }
+  }
   this->process_tx_queue_(now);
 
   if (this->poll_interval_ms_ == 0 || this->polled_targets_.empty()) {
@@ -271,10 +289,9 @@ bool SmartLedzHub::enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_
 
 void SmartLedzHub::apply_power_on_hold_(uint16_t target, uint32_t now) {
   const uint32_t hold_until = now + this->power_on_settle_ms_;
-  auto &target_hold_until = this->target_hold_until_ms_[target];
-  if (static_cast<int32_t>(hold_until - target_hold_until) > 0) {
-    target_hold_until = hold_until;
-  }
+  // A new ON command starts a new hold. Never compare with a default timestamp
+  // of zero: after 2^31 ms it would be interpreted as a future deadline.
+  this->target_hold_until_ms_[target] = hold_until;
 
   for (auto &queued : this->tx_queue_) {
     if (queued.target != target) {
@@ -284,8 +301,8 @@ void SmartLedzHub::apply_power_on_hold_(uint16_t target, uint32_t now) {
         queued.opcode != smartledz_protocol::v1::kOpcodeColor) {
       continue;
     }
-    if (static_cast<int32_t>(target_hold_until - queued.not_before_ms) > 0) {
-      queued.not_before_ms = target_hold_until;
+    if (static_cast<int32_t>(hold_until - queued.not_before_ms) > 0) {
+      queued.not_before_ms = hold_until;
     }
   }
 }

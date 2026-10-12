@@ -1,17 +1,23 @@
+[settings]
+experimental = true
+lockfile = true
+
 [tools]
-"pipx:esphome" = "2026.2.2"
-"pipx:ruff" = "0.15.4"
-"pipx:ty" = "0.0.19"
-python = "3.14.3"
-uv = "0.10.7"
+python = "3.15.0"
+uv = "0.13.0"
 
 [tasks.esphome-compile]
 description = "Compile Smart LEDZ test YAML (local external component, no secrets)"
-run = "PLATFORMIO_CORE_DIR=.platformio-local esphome compile compile_test.yaml"
+env = { PLATFORMIO_CORE_DIR = ".platformio-local" }
+run = "uv run --locked esphome compile compile_test.yaml"
+
+[tasks.test]
+description = "Run host C++ regression tests (requires g++ and sibling libraries)"
+run = "bash tests/run.sh"
 
 [tasks.lint]
 description = "Run Python lint/type checks for the external component"
 run = """
-ruff check components tools
-ty check --project . --python "$(mise where pipx:esphome)/esphome/bin/python3" --extra-search-path components components tools
+uv run --locked ruff check components tools
+uv run --locked ty check --project . --python .venv --extra-search-path components components tools
 """
