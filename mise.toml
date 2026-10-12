@@ -1,8 +1,11 @@
 [settings]
 experimental = true
 lockfile = true
+lockfile_platforms = ["linux-x64", "windows-x64"]
 
 [tools]
+"conda:clang-tools" = "22.1.8"
+"conda:clang" = "22.1.8"
 python = "3.15.0"
 uv = "0.13.0"
 
@@ -21,3 +24,8 @@ run = """
 uv run --locked ruff check components tools
 uv run --locked ty check --project . --python .venv --extra-search-path components components tools
 """
+
+[tasks.cpp-check]
+description = "Check all C++ sources and public headers"
+depends = ["esphome-compile"]
+run = "uv run --locked python tools/check_cpp.py --database .esphome/build/smartledz-compile-test/build/compile_commands.json"
