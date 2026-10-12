@@ -80,6 +80,22 @@ The converter tool is a static page. Loaded JSON is processed only in your brows
 - Optional: `ct_duv` (default: `0`, range: `-6.0` to `6.0`)
 - Optional: `duv_number` (synca only, auto-created by default)
 - Optional: `ignore_transition` (default: `true`)
+- Optional: `turn_on_mode` (`color_then_brightness` by default, or `legacy`)
+
+For an individual SYNCA fixture confirmed OFF by an online-status notification,
+`color_then_brightness` writes the requested RGB first, waits for the GATT write
+response, then sends brightness to turn the fixture on. Color-temperature requests
+use the same sequence after conversion to RGB. This skips the explicit ON command
+and its `power_on_settle` delay; the normal `tx_interval` and write responses remain.
+GATT completion confirms the BLE write, not delivery to every mesh device.
+
+Unknown power state (including after reconnect), group/broadcast/connected-node
+targets, and non-SYNCA fixtures retain the legacy sequence. Set
+`turn_on_mode: legacy` on a light to always use explicit ON, the settle delay,
+brightness, then color. Updates while already ON retain their existing behavior.
+Pending staged requests are replaced by newer desired values; OFF cancels unsent
+stages. A packet already transmitted cannot be recalled. A failed color write
+never advances to brightness; retries and disconnect recovery remain bounded.
 
 ### `duv_number` (synca only)
 

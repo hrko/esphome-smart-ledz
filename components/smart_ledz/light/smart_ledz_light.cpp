@@ -152,12 +152,22 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
     return;
   }
 
-  if (should_send_on_off && !this->parent_->send_on_off(this->target_, is_on)) {
+  const bool staged_turn_on = is_on && device_type == SMART_LEDZ_DEVICE_TYPE_SYNCA &&
+      this->color_then_brightness_ && this->target_ > 0 && this->target_ < 0x8000 &&
+      ((should_send_on_off && this->parent_->is_confirmed_off(this->target_)) ||
+       this->parent_->is_rgb_turn_on_pending(this->target_));
+  if (staged_turn_on && !this->parent_->send_rgb_turn_on(
+          this->target_, desired_r, desired_g, desired_b, static_cast<uint8_t>(brightness_pct))) {
+    ESP_LOGW(TAG, "staged turn-on send failed target=0x%04X", this->target_);
+    return;
+  }
+
+  if (!staged_turn_on && should_send_on_off && !this->parent_->send_on_off(this->target_, is_on)) {
     ESP_LOGW(TAG, "on/off send failed target=0x%04X", this->target_);
     return;
   }
 
-  if (should_send_brightness &&
+  if (!staged_turn_on && should_send_brightness &&
       !this->parent_->send_brightness(this->target_, static_cast<uint8_t>(brightness_pct))) {
     ESP_LOGW(TAG, "brightness send failed target=0x%04X", this->target_);
     return;
@@ -171,7 +181,7 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
     this->has_last_ct_raw_ = true;
     this->last_ct_raw_ = desired_ct_raw;
   } else if (should_send_rgb) {
-    if (!this->parent_->send_rgb(this->target_, desired_r, desired_g, desired_b)) {
+    if (!staged_turn_on && !this->parent_->send_rgb(this->target_, desired_r, desired_g, desired_b)) {
       ESP_LOGW(TAG, "rgb send failed target=0x%04X", this->target_);
       return;
     }
@@ -186,6 +196,9 @@ void SmartLedzLightOutput::write_state(light::LightState *state) {
 
 void SmartLedzLightOutput::on_smart_ledz_state_update(uint16_t address, const SmartLedzDeviceStateSnapshot &state) {
   if (address != this->target_ || this->state_ == nullptr) {
+    return;
+  }
+  if (this->parent_ != nullptr && this->parent_->is_rgb_turn_on_pending(this->target_)) {
     return;
   }
   if (this->state_->current_values != this->state_->remote_values) {

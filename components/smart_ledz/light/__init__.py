@@ -20,6 +20,7 @@ CONF_CT_DUV = "ct_duv"
 CONF_DUV_NUMBER = "duv_number"
 CONF_IGNORE_TRANSITION = "ignore_transition"
 CONF_TARGET = "target"
+CONF_TURN_ON_MODE = "turn_on_mode"
 
 SmartLedzHub = smart_ledz_ns.class_("SmartLedzHub")
 SmartLedzLightOutput = smart_ledz_ns.class_("SmartLedzLightOutput", light.LightOutput)
@@ -93,6 +94,9 @@ CONFIG_SCHEMA = cv.All(
         cv.Optional(CONF_CT_DUV, default=0): cv.float_range(min=-6, max=6),
         cv.Optional(CONF_DUV_NUMBER): DUV_NUMBER_SCHEMA,
         cv.Optional(CONF_IGNORE_TRANSITION, default=True): cv.boolean,
+        cv.Optional(CONF_TURN_ON_MODE, default="color_then_brightness"): cv.one_of(
+            "color_then_brightness", "legacy", lower=True
+        ),
     }
     ),
     _validate_dynamic_duv,
@@ -109,6 +113,7 @@ async def to_code(config):
     cg.add(var.set_device_type(config[CONF_DEVICE_TYPE]))
     cg.add(var.set_ct_duv(config[CONF_CT_DUV]))
     cg.add(var.set_ignore_transition(config[CONF_IGNORE_TRANSITION]))
+    cg.add(var.set_color_then_brightness(config[CONF_TURN_ON_MODE] == "color_then_brightness"))
 
     if CONF_DUV_NUMBER in config:
         duv_config = config[CONF_DUV_NUMBER]

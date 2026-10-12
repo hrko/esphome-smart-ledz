@@ -5,7 +5,7 @@ mesh=${ESP_TELINK_MESH_DIR:-../esp-telink-mesh}
 protocol=${SMARTLEDZ_PROTOCOL_DIR:-../smartledz-protocol}
 binary=$(mktemp)
 trap 'rm -f "$binary"' EXIT
-for test in tests/light_sync_test.cpp tests/tx_queue_test.cpp; do
+for test in tests/light_sync_test.cpp tests/tx_queue_test.cpp tests/turn_on_test.cpp; do
 g++ -std=c++17 -Wall -Wextra -Werror -DUSE_ESP32 \
   -Itests/stubs -I"$mesh/tests/stubs" -I"$mesh/include" -I"$protocol/include" -I. \
   components/smart_ledz/light/smart_ledz_light.cpp components/smart_ledz/smart_ledz.cpp \

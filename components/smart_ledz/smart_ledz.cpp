@@ -203,6 +203,12 @@ void SmartLedzHub::update_device_from_online_status_(const uint8_t *payload10, s
   smartledz_protocol::v1::apply_online_status_payload(payload10, payload_len, millis(), &this->device_states_,
                                                        &updated_addresses);
   for (const auto address : updated_addresses) {
+    const auto &state = this->device_states_.at(address);
+    if (state.reachable && state.has_power && !state.power) {
+      this->confirmed_off_targets_.insert(address);
+    } else {
+      this->confirmed_off_targets_.erase(address);
+    }
     this->notify_state_update_(address);
   }
 }
@@ -247,7 +253,7 @@ void SmartLedzHub::trim_queued_target_commands_(uint16_t target, uint8_t opcode,
 }
 
 bool SmartLedzHub::enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len,
-                                   uint32_t not_before_ms, bool verify_after_send) {
+                                   uint32_t not_before_ms, bool verify_after_send, int16_t turn_on_brightness) {
   if (!this->session_.is_session_ready()) {
     ESP_LOGW(TAG, "[%s] cannot queue packet before pairing", this->parent_->address_str());
     return false;
@@ -262,6 +268,7 @@ bool SmartLedzHub::enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_
   cmd.opcode = opcode;
   cmd.not_before_ms = not_before_ms;
   cmd.verify_after_send = verify_after_send;
+  cmd.turn_on_brightness = turn_on_brightness;
   const auto data_len = std::min(payload_len, static_cast<size_t>(10));
   cmd.payload_len = static_cast<uint8_t>(data_len);
   for (size_t i = 0; i < data_len; i++) {
@@ -273,6 +280,9 @@ bool SmartLedzHub::enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_
       if (it->target != cmd.target || it->opcode != cmd.opcode) {
         continue;
       }
+      if ((it->turn_on_brightness >= 0) != (cmd.turn_on_brightness >= 0)) {
+        continue;
+      }
       if (opcode == smartledz_protocol::v1::kOpcodeColor) {
         if (it->payload_len == 0 || cmd.payload_len == 0 || it->payload[0] != cmd.payload[0]) {
           continue;
@@ -280,6 +290,7 @@ bool SmartLedzHub::enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_
       }
       it->payload = cmd.payload;
       it->payload_len = cmd.payload_len;
+      it->turn_on_brightness = cmd.turn_on_brightness;
       if (static_cast<int32_t>(cmd.not_before_ms - it->not_before_ms) > 0) {
         it->not_before_ms = cmd.not_before_ms;
       }
@@ -384,6 +395,23 @@ void SmartLedzHub::process_tx_queue_(uint32_t now) {
     return;
   }
   this->awaiting_ack_ = true;
+  if (cmd.turn_on_brightness >= 0 && cmd.opcode == smartledz_protocol::v1::kOpcodeBrightness) {
+    auto &state = this->state_ref_(cmd.target);
+    state.seen = true;
+    state.has_power = true;
+    state.power = true;
+    state.has_brightness = true;
+    state.brightness = static_cast<uint8_t>(cmd.turn_on_brightness);
+    state.last_update_ms = now;
+  }
+  if (cmd.opcode == smartledz_protocol::v1::kOpcodeOnOff ||
+      cmd.opcode == smartledz_protocol::v1::kOpcodeBrightness) {
+    if (cmd.target == 0 || cmd.target >= 0x8000) {
+      this->confirmed_off_targets_.clear();
+    } else {
+      this->confirmed_off_targets_.erase(cmd.target);
+    }
+  }
   if (cmd.opcode == smartledz_protocol::v1::kOpcodeOnOff) {
     if (cmd.payload_len > 0 && cmd.payload[0] != 0) {
       this->apply_power_on_hold_(cmd.target, now);
@@ -404,6 +432,8 @@ bool SmartLedzHub::send_on_off(uint16_t target, bool on) {
   }
   this->trim_queued_target_commands_(target, smartledz_protocol::v1::kOpcodeBrightness, -1);
   this->trim_queued_target_commands_(target, smartledz_protocol::v1::kOpcodeColor, -1);
+  this->cancel_active_turn_on_(target);
+  this->confirmed_off_targets_.erase(target);
   if (!on) {
     this->target_hold_until_ms_.erase(target);
   }
@@ -434,6 +464,7 @@ bool SmartLedzHub::send_brightness(uint16_t target, uint8_t brightness) {
 
   auto ok = this->enqueue_packet_(target, cmd.opcode, cmd.payload.data(), cmd.payload_len, not_before, true);
   if (ok) {
+    this->confirmed_off_targets_.erase(target);
     auto &state = this->state_ref_(target);
     state.seen = true;
     state.has_brightness = true;
@@ -441,6 +472,53 @@ bool SmartLedzHub::send_brightness(uint16_t target, uint8_t brightness) {
     state.last_update_ms = millis();
   }
   return ok;
+}
+
+bool SmartLedzHub::is_confirmed_off(uint16_t target) const {
+  if (this->confirmed_off_targets_.count(target) == 0) {
+    return false;
+  }
+  const auto changes_power = [target](const TxCommand &cmd) {
+    return (cmd.target == target || cmd.target == 0 || cmd.target >= 0x8000) &&
+        (cmd.opcode == smartledz_protocol::v1::kOpcodeOnOff ||
+         cmd.opcode == smartledz_protocol::v1::kOpcodeBrightness || cmd.turn_on_brightness >= 0);
+  };
+  return !(this->has_active_tx_ && changes_power(this->active_tx_)) &&
+      std::none_of(this->tx_queue_.begin(), this->tx_queue_.end(), changes_power);
+}
+
+bool SmartLedzHub::is_rgb_turn_on_pending(uint16_t target) const {
+  if (this->has_active_tx_ && this->active_tx_.target == target &&
+      this->active_tx_.turn_on_brightness >= 0 && !this->active_tx_.cancelled) {
+    return true;
+  }
+  return std::any_of(this->tx_queue_.begin(), this->tx_queue_.end(), [target](const TxCommand &cmd) {
+    return cmd.target == target && cmd.turn_on_brightness >= 0;
+  });
+}
+
+void SmartLedzHub::cancel_active_turn_on_(uint16_t target) {
+  if (this->has_active_tx_ && this->active_tx_.target == target && this->active_tx_.turn_on_brightness >= 0) {
+    // Never modify an in-flight packet or retry it after a newer request.
+    this->active_tx_.cancelled = true;
+    if (!this->awaiting_ack_) {
+      this->has_active_tx_ = false;
+    }
+  }
+}
+
+bool SmartLedzHub::send_rgb_turn_on(uint16_t target, uint8_t red, uint8_t green, uint8_t blue,
+                                     uint8_t brightness) {
+  if (target == 0 || target >= 0x8000 || brightness == 0 || brightness > 100) {
+    return false;
+  }
+  const auto cmd = smartledz_protocol::v1::make_rgb(red, green, blue);
+  if (!this->enqueue_packet_(target, cmd.opcode, cmd.payload.data(), cmd.payload_len, millis(), true, brightness)) {
+    return false;
+  }
+  this->cancel_active_turn_on_(target);
+  this->confirmed_off_targets_.erase(target);
+  return true;
 }
 
 bool SmartLedzHub::send_rgb(uint16_t target, uint8_t red, uint8_t green, uint8_t blue) {
@@ -495,6 +573,7 @@ void SmartLedzHub::reset_runtime_state_() {
   this->configure_session_();
   this->session_.reset();
   this->device_states_.clear();
+  this->confirmed_off_targets_.clear();
   this->last_poll_ms_ = 0;
   this->poll_cursor_ = 0;
   this->tx_queue_.clear();
@@ -543,7 +622,17 @@ void SmartLedzHub::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t
                                            &session_established);
       if (control_completion) {
         this->awaiting_ack_ = false;
-        if (param->write.status == ESP_GATT_OK) {
+        if (this->active_tx_.cancelled) {
+          this->has_active_tx_ = false;
+        } else if (param->write.status == ESP_GATT_OK && this->active_tx_.turn_on_brightness >= 0 &&
+                   this->active_tx_.opcode == smartledz_protocol::v1::kOpcodeColor) {
+          // Only advance after the color write completes; retain the normal TX interval.
+          const auto brightness = smartledz_protocol::v1::make_brightness(this->active_tx_.turn_on_brightness);
+          this->active_tx_.opcode = brightness.opcode;
+          this->active_tx_.payload = brightness.payload;
+          this->active_tx_.payload_len = brightness.payload_len;
+          this->active_tx_.attempts = 0;
+        } else if (param->write.status == ESP_GATT_OK) {
           const auto completed = this->active_tx_;
           this->has_active_tx_ = false;
           if (completed.verify_after_send) {

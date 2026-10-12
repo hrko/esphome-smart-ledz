@@ -52,6 +52,9 @@ class SmartLedzHub : public ble_client::BLEClientNode, public Component {
   bool send_on_off(uint16_t target, bool on);
   bool send_brightness(uint16_t target, uint8_t brightness);
   bool send_rgb(uint16_t target, uint8_t red, uint8_t green, uint8_t blue);
+  bool send_rgb_turn_on(uint16_t target, uint8_t red, uint8_t green, uint8_t blue, uint8_t brightness);
+  bool is_rgb_turn_on_pending(uint16_t target) const;
+  bool is_confirmed_off(uint16_t target) const;
   bool send_ct_raw(uint16_t target, uint8_t ct_raw);
   bool send_status_query(uint16_t target);
   bool send_dimming_query(uint16_t target);
@@ -80,6 +83,8 @@ class SmartLedzHub : public ble_client::BLEClientNode, public Component {
     uint32_t not_before_ms{0};
     bool verify_after_send{false};
     uint8_t attempts{0};
+    int16_t turn_on_brightness{-1};
+    bool cancelled{false};
   };
 
   void configure_session_();
@@ -87,7 +92,8 @@ class SmartLedzHub : public ble_client::BLEClientNode, public Component {
   void reset_runtime_state_();
   void fail_tx_();
   bool enqueue_packet_(uint16_t target, uint8_t opcode, const uint8_t *payload, size_t payload_len,
-                       uint32_t not_before_ms, bool verify_after_send);
+                       uint32_t not_before_ms, bool verify_after_send, int16_t turn_on_brightness = -1);
+  void cancel_active_turn_on_(uint16_t target);
   void process_tx_queue_(uint32_t now);
   void apply_power_on_hold_(uint16_t target, uint32_t now);
   void trim_queued_target_commands_(uint16_t target, uint8_t opcode, int8_t e2_subtype);
@@ -106,6 +112,7 @@ class SmartLedzHub : public ble_client::BLEClientNode, public Component {
   esp_telink_mesh::v1::SessionClient session_;
 
   std::map<uint16_t, DeviceState> device_states_;
+  std::set<uint16_t> confirmed_off_targets_;
   std::vector<SmartLedzStateListener *> state_listeners_;
   std::set<uint16_t> polled_targets_;
   uint32_t poll_interval_ms_{2000};

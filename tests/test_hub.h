@@ -35,6 +35,8 @@ class TestHub : public SmartLedzHub {
     gattc_event_handler(ESP_GATTC_WRITE_CHAR_EVT, 1, &event);
   }
   void reset() { reset_runtime_state_(); }
+  uint8_t active_payload(size_t index) const { return active_tx_.payload[index]; }
+  void online(const uint8_t *payload, size_t len) { update_device_from_online_status_(payload, len); }
   uint16_t active_target() const { return active_tx_.target; }
   uint8_t active_opcode() const { return active_tx_.opcode; }
   bool active() const { return has_active_tx_; }

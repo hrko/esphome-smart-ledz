@@ -36,7 +36,9 @@ jobs:
         run: node tests/export_yaml_test.cjs
       - name: Lint and type check
         working-directory: esphome-smart-ledz
-        run: mise run lint
+        run: |
+          mise run lint
+          uv run --locked python tests/turn_on_config_test.py
       - name: Compile ESP32-S3 firmware and analyze C++
         working-directory: esphome-smart-ledz
         run: mise run cpp-check
